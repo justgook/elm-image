@@ -49,7 +49,7 @@ import Html exposing (img)
 
 ## Example 2
 
-Create texture by using base64 encoded image as loading url and then use it in shader
+Create texture useing base64 encoded image and load it to  shader
 ```elm
 import Image.BMP exposing (encode24)
 
