@@ -19,7 +19,8 @@ env:
     # - ELM_VERSION=0.18.0 TARGET_NODE_VERSION=4.0
 
 before_install:
-  - if [ ${TRAVIS_OS_NAME} == "osx" ];
+  - |
+    if [ ${TRAVIS_OS_NAME} == "osx" ];
     then
       brew update;
       brew install nvm;
