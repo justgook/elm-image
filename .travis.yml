@@ -1,8 +1,9 @@
 sudo: false
-
+language: node_js
 cache:
+  yarn: true
   directories:
-    - test/elm-stuff/build-artifacts
+    - test/elm-stuff
     - sysconfcpus
 
 os:
@@ -44,4 +45,3 @@ script:
   - elm-format --validate .
   - elm-analyse
   - elm-test
-  # - elm-package install -y
