@@ -34,15 +34,16 @@ install:
   - nvm use $TARGET_NODE_VERSION
   - node --version
   - npm --version
-  - cd tests
-  - npm install -g elm@$ELM_VERSION elm-test elm-analyse
+  - npm install -g elm@$ELM_VERSION elm-test elm-analyse elm-format
   - mv $(npm config get prefix)/bin/elm-make $(npm config get prefix)/bin/elm-make-old
   - printf '%s\n\n' '#!/bin/bash' 'echo "Running elm-make with sysconfcpus -n 2"' '$TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 elm-make-old "$@"' > $(npm config get prefix)/bin/elm-make
   - chmod +x $(npm config get prefix)/bin/elm-make
-  - elm package install --yes
-  - cd ..
+  # - cd tests
+  - elm-package install -y
+  # - cd ..
 
 script:
-  - elm-test
-  - elm-package install
+  - elm-format --validate src/
   - elm-analyse
+  - elm-test
+  # - elm-package install -y
