@@ -44,4 +44,5 @@ install:
 
 script:
   - elm-test
+  - elm-package install
   - elm-analyse
