@@ -46,7 +46,8 @@ import Html exposing (img)
         { defaultColor = 0x00FFFF00, order = RightDown }
 
 ```
-#Example 2
+
+## Example 2
 
 Create texture by using base64 encoded image as loading url and then use it in shader
 ```elm
