@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "summary": "Test Suites",
-  "repository": "https://github.com/justgook/elm-image-encode",
+  "repository": "https://github.com/justgook/elm-image-encode.git",
   "license": "BSD3",
   "source-directories": [
     "../src",
