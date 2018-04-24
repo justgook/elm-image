@@ -71,7 +71,7 @@ module Image.BMP exposing (encode24, encode24With)
 
 import Image exposing (Order(..), Options, defaultOptions)
 import BinaryBase64
-import Bitwise exposing (and, or, shiftLeftBy, shiftRightBy, shiftRightZfBy)
+import Bitwise exposing (and, shiftRightBy)
 
 
 {-| ##Eexample

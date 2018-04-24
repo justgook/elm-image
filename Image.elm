@@ -21,7 +21,10 @@ type Order
 
 {-| -}
 type alias Options a =
-    { a | defaultColor : Int, order : Order }
+    { a
+        | defaultColor : Int
+        , order : Order
+    }
 
 
 {-|
