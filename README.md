@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/justgook/elm-image-encode.svg?branch=master)](https://travis-ci.org/justgook/elm-image-encode)
+
 A library for building base64 encoded images in elm
 
 ## Motivation
