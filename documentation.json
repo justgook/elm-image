@@ -1,0 +1,68 @@
+[
+  {
+    "name": "Image.BMP",
+    "comment": "\n\n\n# BMP image creating\n\n@docs encode24, encode24With\n\n",
+    "aliases": [],
+    "types": [],
+    "values": [
+      {
+        "name": "encode24",
+        "comment": " ##Eexample\n\nshortcut for [`encode24With`](#encode24With) with [`defaultOptions`](#defaultOptions)\n\n    encode24With :\n        Width\n        -> Height\n        -> List Pixels\n        -> Base64String\n\n",
+        "type": "Int -> Int -> List Int -> String"
+      },
+      {
+        "name": "encode24With",
+        "comment": "\n\n    encode24With :\n        Width\n        -> Height\n        -> List Pixels\n        -> Options\n        -> Base64String\n",
+        "type": "Int -> Int -> List Int -> Image.Options a -> String"
+      }
+    ],
+    "generated-with-elm-version": "0.18.0"
+  },
+  {
+    "name": "Image",
+    "comment": " #Usage\n\n    import Html exposing (img)\n    import Html.Attributes exposing (src)\n    import Image.BMP exposing (encode24With)\n\n    main : Html.Html msg\n    main =\n        img [ src (encode24With width height pixels options) ] []\n\n    width : Int\n    width =\n        2\n\n    height : Int\n    height =\n        2\n\n    red : Int\n    red =\n        0x00FF0000\n\n    green : Int\n    green =\n        0xFF00\n\n    blue : Int\n    blue =\n        0xFF\n\n    pixels : List Int\n    pixels =\n        [ red, green, blue, red ]\n\n    options : Options {}\n    options =\n        { defaultColor = 0x00FFFF00, order = RightDown }\n\n\n# Options\n\n@docs defaultOptions, Options, Order\n\n",
+    "aliases": [
+      {
+        "name": "Options",
+        "comment": " ",
+        "args": [
+          "a"
+        ],
+        "type": "{ a | defaultColor : Int, order : Image.Order }"
+      }
+    ],
+    "types": [
+      {
+        "name": "Order",
+        "comment": " Pixel render order in image\n",
+        "args": [],
+        "cases": [
+          [
+            "RightDown",
+            []
+          ],
+          [
+            "RightUp",
+            []
+          ],
+          [
+            "LeftDown",
+            []
+          ],
+          [
+            "LeftUp",
+            []
+          ]
+        ]
+      }
+    ],
+    "values": [
+      {
+        "name": "defaultOptions",
+        "comment": "\n\n    { defaultColor = 0x00FFFF00\n    , order = RightDown\n    }\n",
+        "type": "Image.Options {}"
+      }
+    ],
+    "generated-with-elm-version": "0.18.0"
+  }
+]
