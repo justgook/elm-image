@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/justgook/elm-image-encode.svg?branch=master)](https://travis-ci.org/justgook/elm-image-encode)
+[![Build Status](https://travis-ci.org/justgook/elm-image.svg?branch=master)](https://travis-ci.org/justgook/elm-image)
 
 A library for building base64 encoded images in elm
 
@@ -10,62 +10,48 @@ A library for building base64 encoded images in elm
 ## Examples
 
 ```elm
-
+import Base64
 import Html exposing (img)
-    import Html.Attributes exposing (src)
-    import Image exposing (ColorDepth, Options)
-    import Image.BMP exposing (encode24With)
+import Html.Attributes exposing (src)
+import Image
+import Image.Data as Image exposing (Image)
+import Image.Options
 
-    main : Html.Html msg
-    main =
-        img [ src (encode24With width height pixels options) ] []
+main =
+    let
+        imageData : Image
+        imageData =
+            Image.fromList2d
+                [ List.repeat 4 0xFFFF
+                , List.repeat 4 0xFF0000FF
+                , List.repeat 4 0xFFFF
+                , List.repeat 2 0x00FFFFFF
+                ]
 
-    width : Int
-    width =
-        2
-
-    height : Int
-    height =
-        2
-
-    red : Int
-    red =
-        0x00FF0000
-
-    green : Int
-    green =
-        0xFF00
-
-    blue : Int
-    blue =
-        0xFF
-
-    pixels : List Int
-    pixels =
-        [ red, green, blue, red ]
-
-    options : Options {}
-    options =
-        { defaultColor = 0x00FFFF00, order = RightDown, depth = Bit24 }
-
+        pngEncodeBase64 =
+            imageData
+                |> Image.encodePng
+                |> Base64.fromBytes
+                |> Maybe.withDefault ""
+    in
+    img [ src ("data:image/png;base64," ++ pngEncodeBase64) ] []
 ```
 
 ## Example 2
 
 Create texture useing base64 encoded image and load it to  shader
 ```elm
-import Image.BMP exposing (encode24)
-
-textureTask = WebGL.Texture.load (encode24 2 2 [1,2,3,4] )
+textureTask = WebGL.Texture.load ("data:image/png;base64," ++ pngEncodeBase64)
 -- then use resulting texture as lookup table
 ```
 
 You can use simple function to get data from lookup table, where `color` is pixel color from just created texture
 ```glsl
 float color2float(vec4 color) {
-    return color.z * 255.0
-    + color.y * 256.0 * 255.0
-    + color.x * 256.0 * 256.0 * 255.0
-    ;
-}
+    return
+    color.a * 255.0
+    + color.b * 256.0 * 255.0
+    + color.g * 256.0 * 256.0 * 255.0
+    + color.r * 256.0 * 256.0 * 256.0 * 255.0;
+    }
 ```
