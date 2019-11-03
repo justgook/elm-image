@@ -122,7 +122,7 @@ encode imageData =
                     (<) width
 
                 ( pxCount_, encodedRow_ ) =
-                    encodeRow noLimit intToBytes_ row ( 0, [] )
+                    encodeRow noLimit intToBytes_ row 0 []
 
                 padding =
                     width - pxCount_
@@ -132,7 +132,8 @@ encode imageData =
                         encodeRow noLimit
                             intToBytes_
                             (List.repeat padding defaultColor)
-                            ( pxCount_, encodedRow_ )
+                            pxCount_
+                            encodedRow_
 
                     else
                         ( pxCount_, encodedRow_ )
@@ -169,17 +170,25 @@ encode imageData =
            )
 
 
-encodeRow limit f items ( i, acc ) =
-    let
-        addPx px ( i_, acc2 ) =
-            ( i_ + 1, f px :: acc2 )
-    in
-    case ( limit i, items ) of
-        ( False, px :: rest ) ->
-            encodeRow limit f rest (addPx px ( i, acc ))
+encodeRow : (Int -> Bool) -> (a -> b) -> List a -> Int -> List b -> ( Int, List b )
+encodeRow limit f items i acc =
+    if not (limit i) then
+        case items of
+            px :: rest ->
+                let
+                    newI =
+                        i + 1
 
-        _ ->
-            ( i, acc )
+                    newAcc =
+                        f px :: acc
+                in
+                encodeRow limit f rest newI newAcc
+
+            _ ->
+                ( i, acc )
+
+    else
+        ( i, acc )
 
 
 applyIf : Bool -> (a -> a) -> a -> a
