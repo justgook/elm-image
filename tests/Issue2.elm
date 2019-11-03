@@ -34,18 +34,49 @@ array =
 
 suite =
     describe "Issue #2"
-        [ only <|
-            test "fromList2d is equivalent to fromArray2d for bmp" <|
-                \_ ->
-                    let
-                        process image =
-                            image
-                                |> Image.encodeBmp
-                                |> Base64.fromBytes
-                                |> Maybe.withDefault ""
-                    in
-                    process list
-                        |> Expect.equal (process array)
+        [ test "fromList2d is equivalent to fromArray2d for bmp" <|
+            \_ ->
+                let
+                    process image =
+                        image
+                            |> Image.encodeBmp
+                            |> Base64.fromBytes
+                            |> Maybe.withDefault ""
+                in
+                process list
+                    |> Expect.equal (process array)
+        , test "fromList2d is equivalent to (fromList n << List.concat) for bmp" <|
+            \_ ->
+                let
+                    process image =
+                        image
+                            |> Image.encodeBmp
+                            |> Base64.fromBytes
+                            |> Maybe.withDefault ""
+                in
+                process (Image.fromList 4 <| List.concat listData)
+                    |> Expect.equal (process (Image.fromList2d listData))
+        , test "fromArray2d is equivalent to (fromArray n << List.concat) for bmp" <|
+            \_ ->
+                let
+                    arrayData =
+                        listData
+                            |> List.map Array.fromList
+                            |> Array.fromList
+
+                    flatArrayData =
+                        listData
+                            |> List.concat
+                            |> Array.fromList
+
+                    process image =
+                        image
+                            |> Image.encodeBmp
+                            |> Base64.fromBytes
+                            |> Maybe.withDefault ""
+                in
+                process (Image.fromArray 4 flatArrayData)
+                    |> Expect.equal (process (Image.fromArray2d arrayData))
         , test "fromList2d is equivalent to fromArray2d for png" <|
             \_ ->
                 let

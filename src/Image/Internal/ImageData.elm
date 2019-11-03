@@ -247,8 +247,14 @@ width_ info =
         List2d _ (first :: _) ->
             List.length first
 
-        _ ->
+        List2d _ [] ->
             0
+
+        Array _ width _ ->
+            width
+
+        List _ width _ ->
+            width
 
 
 applyIf : Bool -> (a -> a) -> a -> a
