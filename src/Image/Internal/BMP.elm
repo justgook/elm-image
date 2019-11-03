@@ -137,22 +137,22 @@ encode imageData =
                         extra =
                             padWidth rowWidth
 
-                        withPaddedBytes =
-                            if extra == 0 then
-                                acc
-
-                            else
-                                E.sequence (List.repeat extra (E.unsignedInt8 0)) :: acc
+                        paddingEncoders =
+                            List.repeat extra (E.unsignedInt8 0)
 
                         withRow =
                             if orderRight then
-                                E.sequence (List.reverse encodedRow) :: withPaddedBytes
+                                if extra == 0 then
+                                    E.sequence (List.reverse encodedRow) :: acc
+
+                                else
+                                    E.sequence (List.reverse encodedRow ++ paddingEncoders) :: acc
+
+                            else if extra == 0 then
+                                E.sequence encodedRow :: acc
 
                             else
-                                E.sequence encodedRow :: withPaddedBytes
-
-                        _ =
-                            Debug.log "pixels" ( pxCount_, rowWidth, padWidth rowWidth )
+                                E.sequence (encodedRow ++ paddingEncoders) :: acc
                     in
                     encodeFolder rest (height + 1) (totalBytes + rowWidth * bytesPerPixel + extra) withRow
 
@@ -164,9 +164,6 @@ encode imageData =
 
                             else
                                 acc
-
-                        _ =
-                            Debug.log "widths" ( totalBytes, body |> E.sequence |> E.encode |> Bytes.width )
                     in
                     if format == RGBA then
                         header32 width height totalBytes body
