@@ -244,6 +244,9 @@ width_ info =
         Array2d _ arr ->
             Array.get 0 arr |> Maybe.map Array.length |> Maybe.withDefault 0
 
+        List2d _ (first :: _) ->
+            List.length first
+
         _ ->
             0
 
