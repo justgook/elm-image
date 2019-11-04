@@ -21,3 +21,5 @@ before_install:
   #Elm cache folders for each OS
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export ELM_HOME=./elm_cache_linux; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export ELM_HOME=./elm_cache_osx; fi
+script:
+  elm-format --validate ./src ./tests && elm-test

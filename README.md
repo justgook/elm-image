@@ -4,7 +4,7 @@ A library for building base64 encoded images in elm
 
 ## Motivation
 
-[WebGL for Elm](http://package.elm-lang.org/packages/elm-community/webgl/latest) do not support arrays, so I need to build lookup tables for that, to prevent doing it in preprocess was created this library that can convert matrix into image, and then used in shader.
+[WebGL for Elm](https://package.elm-lang.org/packages/elm-explorations/webgl/latest/) do not support arrays, so I need to build lookup tables for that, to prevent doing it in preprocess was created this library that can convert matrix into image, and then used in shader.
 
 
 ## Examples
