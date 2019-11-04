@@ -1,6 +1,6 @@
 module Image.Internal.BMP exposing (decode, encode)
 
-import Bitwise exposing (and)
+import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder, unsignedInt16, unsignedInt32, unsignedInt8)
@@ -88,19 +88,13 @@ encode imageData =
         bytesPerPixel =
             bytesPerPixel_ format
 
-        padWidth w =
-            let
-                improveMe =
-                    and (4 - and (w * bytesPerPixel) bytesPerPixel) bytesPerPixel
-            in
-            if improveMe == 4 then
-                0
-
-            else
-                improveMe
-
         width =
             ImageData.width_ imageData
+
+        -- I think this means that the width is rounded up to a multiple of 4
+        extraBytes =
+            Bitwise.and (4 - Bitwise.and (width * bytesPerPixel) bytesPerPixel) bytesPerPixel
+                |> remainderBy 4
 
         data =
             ImageData.toList2d imageData
@@ -111,86 +105,140 @@ encode imageData =
         orderUp =
             order == RightUp || order == LeftUp
 
-        encodeFolder remaining height totalBytes acc =
-            case remaining of
-                row :: rest ->
-                    let
-                        ( pxCount_, encodedRow_ ) =
-                            encodeRow (intToBytes bytesPerPixel) row 0 []
+        encoder =
+            intToBytes bytesPerPixel
 
-                        -- if this row has fewer pixels than the width, recalculate
-                        ( rowWidth, encodedRow ) =
-                            let
-                                padding =
-                                    width - pxCount_
-                            in
-                            if padding > 0 then
-                                encodeRow
-                                    (intToBytes bytesPerPixel)
-                                    (List.repeat padding defaultColor)
-                                    pxCount_
-                                    encodedRow_
-
-                            else
-                                ( pxCount_, encodedRow_ )
-
-                        extra =
-                            padWidth rowWidth
-
-                        paddingEncoders =
-                            List.repeat extra (E.unsignedInt8 0)
-
-                        withRow =
-                            if orderRight then
-                                if extra == 0 then
-                                    E.sequence (List.reverse encodedRow) :: acc
-
-                                else
-                                    E.sequence (List.reverse encodedRow ++ paddingEncoders) :: acc
-
-                            else if extra == 0 then
-                                E.sequence encodedRow :: acc
-
-                            else
-                                E.sequence (encodedRow ++ paddingEncoders) :: acc
-                    in
-                    encodeFolder rest (height + 1) (totalBytes + rowWidth * bytesPerPixel + extra) withRow
-
-                [] ->
-                    let
-                        body =
-                            if orderUp then
-                                List.reverse acc
-
-                            else
-                                acc
-                    in
-                    if format == RGBA then
-                        header32 width height totalBytes body
-
-                    else
-                        header16_24 (8 * bytesPerPixel) width height totalBytes body
+        config : EncodeConfig
+        config =
+            { bytesPerPixel = bytesPerPixel
+            , width = width
+            , orderRight = orderRight
+            , orderUp = orderUp
+            , format = format
+            , extraBytes = extraBytes
+            , encoder = encoder
+            , defaultColors = List.repeat width (encoder defaultColor)
+            }
     in
-    encodeFolder data 0 0 []
+    encodeFolder config data 0 0 []
         |> E.sequence
         |> E.encode
 
 
-encodeRow : (a -> b) -> List a -> Int -> List b -> ( Int, List b )
+type alias EncodeConfig =
+    { bytesPerPixel : Int
+    , width : Int
+    , orderRight : Bool
+    , orderUp : Bool
+    , format : ImageData.PixelFormat
+    , extraBytes : Int
+    , encoder : Int -> Encoder
+    , defaultColors : List Encoder
+    }
+
+
+{-| Encode a bmp image
+
+Encoding is not entirely straightforward.
+We must encode a rectangular image where the width must also be aligned (i.e. padded in some cases).
+That means handling incomplete rows and adding padding bytes as needed.
+
+The chosen image representation is `List (List a)`, which makes sense from a memory perspective (Array is slow), but means that efficient traversal
+with a recursive function reverses the elements.
+
+This function is written in such a way that as much can be re-used between iterations as possible.
+This really matters! any prevented allocation quickly gives big speed increases.
+
+-}
+encodeFolder : EncodeConfig -> List (List Int) -> Int -> Int -> List Encoder -> List Encoder
+encodeFolder ({ width, extraBytes } as config) remaining height totalBytes acc =
+    case remaining of
+        row :: rest ->
+            let
+                -- determine row length and encode its elements
+                -- flips the pixel order, so we likely must reverse later
+                initial =
+                    encodeRow config.encoder row 0 []
+
+                -- if this row has fewer pixels than the width
+                -- pad it with the default color
+                encoded =
+                    let
+                        padding =
+                            width - initial.width
+                    in
+                    case padding of
+                        0 ->
+                            initial.row
+
+                        _ ->
+                            List.take padding config.defaultColors ++ initial.row
+
+                withRow =
+                    case extraBytes of
+                        0 ->
+                            -- if the order is left-to-right, `encodeRow` has flipped the order, so reverse
+                            if config.orderRight then
+                                E.sequence (List.reverse encoded) :: acc
+
+                            else
+                                E.sequence encoded :: acc
+
+                        _ ->
+                            -- if the order is left-to-right, `encodeRow` has flipped the order, so reverse
+                            if config.orderRight then
+                                E.sequence (List.reverse (addRowPadding extraBytes encoded)) :: acc
+
+                            else
+                                E.sequence (encoded ++ addRowPadding extraBytes []) :: acc
+            in
+            encodeFolder config rest (height + 1) (totalBytes + width * config.bytesPerPixel + extraBytes) withRow
+
+        [] ->
+            let
+                body =
+                    if config.orderUp then
+                        List.reverse acc
+
+                    else
+                        acc
+            in
+            if config.format == RGBA then
+                header32 width height totalBytes body
+
+            else
+                header16_24 (8 * config.bytesPerPixel) width height totalBytes body
+
+
+{-| encode a row (usually `b ~ Encoder`)
+
+This is really like a `List.map` that reverses the input. Unfortunate, but it is the fastest way.
+
+-}
+encodeRow : (a -> b) -> List a -> Int -> List b -> { width : Int, row : List b }
 encodeRow f items i acc =
     case items of
         px :: rest ->
-            let
-                newI =
-                    i + 1
+            encodeRow f rest (i + 1) (f px :: acc)
 
-                newAcc =
-                    f px :: acc
-            in
-            encodeRow f rest newI newAcc
+        [] ->
+            { width = i, row = acc }
+
+
+addRowPadding : Int -> List Encoder -> List Encoder
+addRowPadding n acc =
+    case n of
+        1 ->
+            E.unsignedInt8 0 :: acc
+
+        2 ->
+            E.unsignedInt16 LE 0 :: acc
+
+        3 ->
+            E.unsignedInt16 LE 0 :: E.unsignedInt8 0 :: acc
 
         _ ->
-            ( i, acc )
+            E.unsignedInt32 LE 0 :: acc
 
 
 bytesPerPixel_ : PixelFormat -> number
@@ -209,27 +257,20 @@ bytesPerPixel_ format =
             1
 
 
-bitsPerPixel_ : PixelFormat -> number
-bitsPerPixel_ =
-    bytesPerPixel_ >> (*) 8
-
-
-intToBytes bpp color =
+intToBytes : Int -> (Int -> Encoder)
+intToBytes bpp =
     case bpp of
         1 ->
-            unsignedInt8 color
+            unsignedInt8
 
         2 ->
-            unsignedInt16 Bytes.LE color
+            unsignedInt16 Bytes.LE
 
         3 ->
-            unsignedInt24 Bytes.LE color
-
-        4 ->
-            unsignedInt32 Bytes.LE color
+            unsignedInt24 Bytes.LE
 
         _ ->
-            unsignedInt8 0
+            unsignedInt32 Bytes.LE
 
 
 header2_4_8 =
@@ -317,42 +358,62 @@ header32 w h dataSize accum =
         -- BI_BITFIELDS:: no pixel array compression used
         :: unsignedInt32 LE dataSize
         -- Size of the raw bitmap data (including padding)
-        :: unsignedInt32 LE 2835
-        -- 2835 pixels/metre horizontal
-        :: unsignedInt32 LE 2835
+        :: E.bytes staticHeaderPart
+        :: accum
+
+
+{-| This part of the header is always the same, it's pre-calculated on startup.
+-}
+staticHeaderPart : Bytes
+staticHeaderPart =
+    (E.sequence >> E.encode) <|
+        [ -- 2835 pixels/metre horizontal
+          unsignedInt32 LE 2835
+
         -- 2835 pixels/metre vertical
-        :: unsignedInt32 LE 0
+        , unsignedInt32 LE 2835
+
         -- Number of colors in the palette
-        :: unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+
         --important colors (0 means all colors are important)
-        :: unsignedInt32 LE 0xFF000000
+        , unsignedInt32 LE 0
+
         --00FF0000 in big-endian Red channel bit mask (valid because BI_BITFIELDS is specified)
-        :: unsignedInt32 LE 0x00FF0000
+        , unsignedInt32 LE 0xFF000000
+
         --0000FF00 in big-endian    Green channel bit mask (valid because BI_BITFIELDS is specified)
-        :: unsignedInt32 LE 0xFF00
+        , unsignedInt32 LE 0x00FF0000
+
         --000000FF in big-endian    Blue channel bit mask (valid because BI_BITFIELDS is specified)
-        :: unsignedInt32 LE 0xFF
+        , unsignedInt32 LE 0xFF00
+
         --FF000000 in big-endian    Alpha channel bit mask
-        :: unsignedInt32 LE 0x206E6957
+        , unsignedInt32 LE 0xFF
+
         --   little-endian "Win "    LCS_WINDOWS_COLOR_SPACE
         --CIEXYZTRIPLE Color Space endpoints    Unused for LCS "Win " or "sRGB"
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
-        :: unsignedInt32 LE 0
+        , unsignedInt32 LE 0x206E6957
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+
         -----------
-        :: unsignedInt32 LE 0
         --0 Red Gamma    Unused for LCS "Win " or "sRGB"
-        :: unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+
         --0 Green Gamma    Unused for LCS "Win " or "sRGB"
-        :: unsignedInt32 LE 0
+        , unsignedInt32 LE 0
+
         --0 Blue Gamma    Unused for LCS "Win " or "sRGB"
-        :: accum
+        , unsignedInt32 LE 0
+        ]
 
 
 decode32 : { a | pixelStart : Int, dataSize : Int, width : Int } -> Decoder Image
