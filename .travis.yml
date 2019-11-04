@@ -1,12 +1,23 @@
-sudo: required
-
 language: elm
-node_js: '10' # latest 10.x
 
-elm-test: 0.19.0-rev6
-elm-format: 0.8.1
+node_js: '12'
+
+sudo: required
+dist: trusty
+
+elm:
+  - latest
+elm_test: latest
+elm_format: latest
 
 cache:
   yarn: true
   directories:
     - node_modules
+    - elm_cache_linux
+    - elm_cache_osx
+
+before_install:
+  #Elm cache folders for each OS
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export ELM_HOME=./elm_cache_linux; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export ELM_HOME=./elm_cache_osx; fi
