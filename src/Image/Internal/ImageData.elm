@@ -163,7 +163,7 @@ toArray image =
             Array.fromList l
 
         List2d _ l ->
-            List.foldl (Array.fromList >> Array.append) Array.empty l
+            List.foldl (Array.fromList >> (\a b -> Array.append b a)) Array.empty l
 
         Array _ _ arr ->
             arr
