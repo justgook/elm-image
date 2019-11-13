@@ -164,6 +164,8 @@ decode bytes =
         |> or (BMP.decode bytes)
 
 
+{-| Get `width` and `height` of [`Image`](#Image)
+-}
 dimensions : Image -> { width : Int, height : Int }
 dimensions =
     Image.Internal.ImageData.dimensions
