@@ -49,6 +49,7 @@ foldlStep decoder ( n, acc ) =
 --        D.map2 (\a b -> a + b * 256 * 255) (D.unsignedInt16 Bytes.LE) D.unsignedInt8
 
 
+unsignedInt24 : Endianness -> Decoder Int
 unsignedInt24 endianness =
     case endianness of
         Bytes.LE ->

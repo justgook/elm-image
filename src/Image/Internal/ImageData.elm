@@ -3,6 +3,8 @@ module Image.Internal.ImageData exposing
     , Order(..)
     , PixelFormat(..)
     , defaultOptions
+    , dimensions
+    , metaFromInfo
     , options
     , setOptions
     , toArray
@@ -19,11 +21,24 @@ import Image.Internal.Array2D as Array2D
 
 
 type Image
-    = List Options Int (List Int)
-    | List2d Options (List (List Int))
-    | Array Options Int (Array Int)
-    | Array2d Options (Array (Array Int))
-    | Bytes Options (Decoder Image) Bytes
+    = List Metadata Options (List Int)
+    | List2d Metadata Options (List (List Int))
+    | Array Metadata Options (Array Int)
+    | Array2d Metadata Options (Array (Array Int))
+    | Bytes Metadata Options (Decoder Image) Bytes
+
+
+type alias Metadata =
+    { width : Int
+    , height : Int
+    }
+
+
+metaFromInfo : { a | width : b, height : c } -> { width : b, height : c }
+metaFromInfo info =
+    { width = info.width
+    , height = info.height
+    }
 
 
 type alias Options =
@@ -61,39 +76,39 @@ defaultOptions =
 options : Image -> Options
 options image =
     case image of
-        List opt _ _ ->
+        List _ opt _ ->
             opt
 
-        List2d opt _ ->
+        List2d _ opt _ ->
             opt
 
-        Array opt _ _ ->
+        Array _ opt _ ->
             opt
 
-        Array2d opt _ ->
+        Array2d _ opt _ ->
             opt
 
-        Bytes opt _ _ ->
+        Bytes _ opt _ _ ->
             opt
 
 
 setOptions : Options -> Image -> Image
 setOptions opt image =
     case image of
-        List _ a b ->
-            List opt a b
+        List meta _ b ->
+            List meta opt b
 
-        List2d _ a ->
-            List2d opt a
+        List2d meta _ a ->
+            List2d meta opt a
 
-        Array _ a b ->
-            Array opt a b
+        Array meta _ b ->
+            Array meta opt b
 
-        Array2d _ a ->
-            Array2d opt a
+        Array2d meta _ a ->
+            Array2d meta opt a
 
-        Bytes _ a b ->
-            Bytes opt a b
+        Bytes meta _ a b ->
+            Bytes meta opt a b
 
 
 toList : Image -> List Int
@@ -102,18 +117,18 @@ toList info =
         List _ _ l ->
             l
 
-        List2d _ l ->
+        List2d _ _ l ->
             List.concat l
 
         Array _ _ arr ->
             Array.toList arr
 
-        Array2d _ arr ->
+        Array2d _ _ arr ->
             Array.foldr (\line acc1 -> Array.foldr (\px acc2 -> px :: acc2) acc1 line) [] arr
 
-        Bytes _ d b ->
+        Bytes _ _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _) ->
+                Just (Bytes _ _ _ _) ->
                     []
 
                 Just newData ->
@@ -126,16 +141,16 @@ toList info =
 toList2d : Image -> List (List Int)
 toList2d info =
     case info of
-        List _ w l ->
-            greedyGroupsOf w l
+        List { width } _ l ->
+            greedyGroupsOf width l
 
-        List2d _ l ->
+        List2d _ _ l ->
             l
 
-        Array _ w arr ->
-            Array.toList arr |> greedyGroupsOf w
+        Array { width } _ arr ->
+            Array.toList arr |> greedyGroupsOf width
 
-        Array2d _ arr ->
+        Array2d _ _ arr ->
             Array.foldr
                 (\line acc1 ->
                     Array.foldr (\px acc2 -> px :: acc2) [] line
@@ -144,9 +159,9 @@ toList2d info =
                 []
                 arr
 
-        Bytes _ d b ->
+        Bytes _ _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _) ->
+                Just (Bytes _ _ _ _) ->
                     []
 
                 Just newData ->
@@ -162,18 +177,18 @@ toArray image =
         List _ _ l ->
             Array.fromList l
 
-        List2d _ l ->
+        List2d _ _ l ->
             List.foldl (Array.fromList >> (\a b -> Array.append b a)) Array.empty l
 
         Array _ _ arr ->
             arr
 
-        Array2d _ arr ->
+        Array2d _ _ arr ->
             Array.foldl Array.append Array.empty arr
 
-        Bytes _ d b ->
+        Bytes _ _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _) ->
+                Just (Bytes _ _ _ _) ->
                     Array.empty
 
                 Just newData ->
@@ -211,21 +226,21 @@ toArray2d image =
                 Array.push arr acc
     in
     case image of
-        List _ w l ->
-            fromList w l (Array.fromList [ Array.empty ])
+        List { width } _ l ->
+            fromList width l (Array.fromList [ Array.empty ])
 
-        List2d _ l ->
+        List2d _ _ l ->
             List.foldl (Array.fromList >> Array.push) Array.empty l
 
-        Array _ w arr ->
-            fromArray w arr Array.empty
+        Array { width } _ arr ->
+            fromArray width arr Array.empty
 
-        Array2d _ arr ->
+        Array2d _ _ arr ->
             arr
 
-        Bytes _ d b ->
+        Bytes _ _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _) ->
+                Just (Bytes _ _ _ _) ->
                     Array.empty
 
                 Just newData ->
@@ -235,25 +250,41 @@ toArray2d image =
                     Array.empty
 
 
+dimensions : Image -> { width : Int, height : Int }
+dimensions image =
+    case image of
+        Bytes meta _ _ _ ->
+            meta
+
+        Array2d meta _ _ ->
+            meta
+
+        List2d meta _ _ ->
+            meta
+
+        Array meta _ _ ->
+            meta
+
+        List meta _ _ ->
+            meta
+
+
 width_ : Image -> Int
 width_ info =
     case info of
-        Bytes _ _ _ ->
-            0
-
-        Array2d _ arr ->
-            Array.get 0 arr |> Maybe.map Array.length |> Maybe.withDefault 0
-
-        List2d _ (first :: _) ->
-            List.length first
-
-        List2d _ [] ->
-            0
-
-        Array _ width _ ->
+        Bytes { width } _ _ _ ->
             width
 
-        List _ width _ ->
+        Array2d { width } _ _ ->
+            width
+
+        List2d { width } _ _ ->
+            width
+
+        Array { width } _ _ ->
+            width
+
+        List { width } _ _ ->
             width
 
 

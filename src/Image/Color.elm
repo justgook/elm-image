@@ -21,35 +21,35 @@ import Array exposing (Array)
 import Bitwise
 import Color exposing (Color)
 import Image exposing (Image, Width)
-import Image.Internal.ImageData exposing (Image(..), defaultOptions)
+import Image.Internal.ImageData exposing (Image(..))
 
 
 {-| Create [`Image`](Image#Image) of `List Color` where each `Color` is pixel
 -}
 fromList : Width -> List Color -> Image
 fromList w =
-    List.map colorToInt32 >> List defaultOptions w
+    List.map colorToInt32 >> Image.fromList w
 
 
 {-| Create [`Image`](#Image) of `List (List Int)` where each `Color` is pixel
 -}
 fromList2d : List (List Color) -> Image
 fromList2d =
-    List.map (List.map colorToInt32) >> List2d defaultOptions
+    List.map (List.map colorToInt32) >> Image.fromList2d
 
 
 {-| Create [`Image`](#Image) of `Array Int` where each `Color` is pixel
 -}
 fromArray : Width -> Array Color -> Image
 fromArray w =
-    Array.map colorToInt32 >> Array defaultOptions w
+    Array.map colorToInt32 >> Image.fromArray w
 
 
 {-| Create [`Image`](#Image) of `Array (Array Int)` where each `Color` is pixel
 -}
 fromArray2d : Array (Array Color) -> Image
 fromArray2d =
-    Array.map (Array.map colorToInt32) >> Array2d defaultOptions
+    Array.map (Array.map colorToInt32) >> Image.fromArray2d
 
 
 {-| Take [`Image`](#Image) of and converts it to `List Int` where each `Color` is pixel

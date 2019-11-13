@@ -2,8 +2,9 @@ module Image exposing
     ( Image
     , decode
     , encodeBmp, encodePng
-    , fromList, fromList2d, fromArray, fromArray2d, fromBytes
+    , fromList, fromList2d, fromArray, fromArray2d
     , toList, toList2d, toArray, toArray2d
+    , dimensions
     , Width, Height
     )
 
@@ -24,12 +25,17 @@ module Image exposing
 
 # Construct
 
-@docs fromList, fromList2d, fromArray, fromArray2d, fromBytes
+@docs fromList, fromList2d, fromArray, fromArray2d
 
 
 # Destruct
 
 @docs toList, toList2d, toArray, toArray2d
+
+
+# Meta Data
+
+@docs dimensions
 
 
 # Helper Types
@@ -40,7 +46,6 @@ module Image exposing
 
 import Array exposing (Array)
 import Bytes exposing (Bytes)
-import Bytes.Decode exposing (Decoder)
 import Image.Internal.BMP as BMP
 import Image.Internal.ImageData exposing (Image(..), defaultOptions)
 import Image.Internal.PNG as PNG
@@ -68,36 +73,39 @@ type alias Image =
 {-| Create [`Image`](#Image) of `List Int` where each Int is `0xRRGGBBAA`
 -}
 fromList : Width -> List Int -> Image
-fromList =
-    List defaultOptions
+fromList w l =
+    List { width = w, height = List.length l // w } defaultOptions l
 
 
 {-| Create [`Image`](#Image) of `List (List Int)` where each Int is `0xRRGGBBAA`
 -}
 fromList2d : List (List Int) -> Image
-fromList2d =
-    List2d defaultOptions
+fromList2d l =
+    List2d
+        { width = l |> List.head |> Maybe.map List.length |> Maybe.withDefault 0
+        , height = List.length l
+        }
+        defaultOptions
+        l
 
 
 {-| Create [`Image`](#Image) of `Array Int` where each Int is `0xRRGGBBAA`
 -}
 fromArray : Width -> Array Int -> Image
-fromArray =
-    Array defaultOptions
+fromArray w arr =
+    Array { width = w, height = Array.length arr // w } defaultOptions arr
 
 
 {-| Create [`Image`](#Image) of `Array (Array Int)` where each Int is `0xRRGGBBAA`
 -}
 fromArray2d : Array (Array Int) -> Image
-fromArray2d =
-    Array2d defaultOptions
-
-
-{-| Create [`Image`](#Image) of Bytes where each pixel is `unsignedInt32` - `0xRRGGBBAA`
--}
-fromBytes : Decoder Image -> Bytes -> Image
-fromBytes =
-    Bytes defaultOptions
+fromArray2d arr =
+    Array2d
+        { width = arr |> Array.get 0 |> Maybe.map Array.length |> Maybe.withDefault 0
+        , height = Array.length arr
+        }
+        defaultOptions
+        arr
 
 
 {-| Take [`Image`](#Image) of and converts it to `List Int` where each Int is `0xRRGGBBAA`
@@ -154,6 +162,11 @@ decode : Bytes -> Maybe { width : Width, height : Height, data : Image }
 decode bytes =
     PNG.decode bytes
         |> or (BMP.decode bytes)
+
+
+dimensions : Image -> { width : Int, height : Int }
+dimensions =
+    Image.Internal.ImageData.dimensions
 
 
 or : Maybe a -> Maybe a -> Maybe a

@@ -4,7 +4,7 @@ import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder, unsignedInt16, unsignedInt32, unsignedInt8)
-import Image.Internal.Decode as D exposing (andMap)
+import Image.Internal.Decode as D
 import Image.Internal.Encode exposing (unsignedInt24)
 import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..), defaultOptions)
 
@@ -40,7 +40,7 @@ decode bytes =
                                                 D.succeed
                                                     { width = info.width
                                                     , height = info.height
-                                                    , data = Bytes defaultOptions ddd bytes
+                                                    , data = Bytes (ImageData.metaFromInfo info) defaultOptions ddd bytes
                                                     }
 
                                             _ ->
@@ -65,16 +65,16 @@ decode bytes =
                     , dataSize = dataSize
                     }
                 )
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt16 LE)
-                |> andMap (D.unsignedInt16 LE)
-                |> andMap (D.unsignedInt32 LE)
-                |> andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt16 LE)
+                |> D.andMap (D.unsignedInt16 LE)
+                |> D.andMap (D.unsignedInt32 LE)
+                |> D.andMap (D.unsignedInt32 LE)
     in
     D.decode decoder bytes
 
@@ -273,9 +273,10 @@ intToBytes bpp =
             unsignedInt32 Bytes.LE
 
 
-header2_4_8 =
-    --    To define colors used by the bitmap image data (Pixel array)      Mandatory for color depths ≤ 8 bits
-    []
+
+--header2_4_8 =
+--    --    To define colors used by the bitmap image data (Pixel array)      Mandatory for color depths ≤ 8 bits
+--    []
 
 
 header16_24 : Int -> Int -> Int -> Int -> List Encoder -> List Encoder
@@ -416,22 +417,22 @@ staticHeaderPart =
         ]
 
 
-decode32 : { a | pixelStart : Int, dataSize : Int, width : Int } -> Decoder Image
+decode32 : { a | pixelStart : Int, height : Int, dataSize : Int, width : Int } -> Decoder Image
 decode32 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR (info.dataSize // 4) (D.unsignedInt32 LE))
-        |> D.map (List defaultOptions info.width)
+        |> D.map (List (ImageData.metaFromInfo info) defaultOptions)
 
 
 decode24 : { a | pixelStart : Int, height : Int, width : Int } -> Decoder Image
 decode24 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt24 LE)))
-        |> D.map (List.concat >> List defaultOptions info.width)
+        |> D.map (List.concat >> List (ImageData.metaFromInfo info) defaultOptions)
 
 
 decode16 : { a | pixelStart : Int, height : Int, width : Int } -> Decoder Image
 decode16 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt16 LE)))
-        |> D.map (List.concat >> List defaultOptions info.width)
+        |> D.map (List.concat >> List (ImageData.metaFromInfo info) defaultOptions)

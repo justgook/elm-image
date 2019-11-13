@@ -30,7 +30,10 @@ suite =
                 pixelFormatTest constructor expected =
                     test (Debug.toString constructor) <|
                         \_ ->
-                            Image.Internal.ImageData.List2d { format = constructor, defaultColor = 0, order = RightUp } smallData
+                            Image.Internal.ImageData.List2d
+                                { width = 10, height = 3 }
+                                { format = constructor, defaultColor = 0, order = RightUp }
+                                smallData
                                 |> Image.encodeBmp
                                 |> Base64.fromBytes
                                 |> Maybe.withDefault ""
@@ -46,7 +49,10 @@ suite =
                 orderTest constructor expected =
                     test (Debug.toString constructor) <|
                         \_ ->
-                            Image.Internal.ImageData.List2d { format = RGBA, defaultColor = 0, order = constructor } smallData
+                            Image.Internal.ImageData.List2d
+                                { width = 10, height = 3 }
+                                { format = RGBA, defaultColor = 0, order = constructor }
+                                smallData
                                 |> Image.encodeBmp
                                 |> Base64.fromBytes
                                 |> Maybe.withDefault ""
@@ -62,7 +68,10 @@ suite =
                 defaultColorTest default expected =
                     test ("default color: " ++ Debug.toString default) <|
                         \_ ->
-                            Image.Internal.ImageData.List2d { format = RGBA, defaultColor = default, order = RightUp } (smallData ++ [ [ 0, 1 ] ])
+                            Image.Internal.ImageData.List2d
+                                { width = 10, height = 3 }
+                                { format = RGBA, defaultColor = default, order = RightUp }
+                                (smallData ++ [ [ 0, 1 ] ])
                                 |> Image.encodeBmp
                                 |> Base64.fromBytes
                                 |> Maybe.withDefault ""

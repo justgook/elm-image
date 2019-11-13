@@ -245,11 +245,12 @@ decode bytes =
     D.decode decoder bytes
 
 
-type alias Chunk_ =
-    { length : Int
-    , kind : Int
-    , data : Bytes
-    }
+
+--type alias Chunk_ =
+--    { length : Int
+--    , kind : Int
+--    , data : Bytes
+--    }
 
 
 type alias PNG =
@@ -369,7 +370,7 @@ decodeIEND ({ header } as image) length =
                             decoder =
                                 dataDecoder header.width header.height total
                         in
-                        D.succeed { image | data = ImageData (Bytes defaultOptions decoder bytes) }
+                        D.succeed { image | data = ImageData (Bytes { width = header.width, height = header.height } defaultOptions decoder bytes) }
 
                     _ ->
                         D.fail
@@ -401,7 +402,7 @@ dataDecoder width height total =
                 bytes
                     |> inflateZlib
                     |> Maybe.andThen (D.decode (decodeImageData pxDecode width height))
-                    |> Maybe.map (Array2d defaultOptions >> D.succeed)
+                    |> Maybe.map (Array2d { width = width, height = height } defaultOptions >> D.succeed)
                     |> Maybe.withDefault D.fail
             )
 
