@@ -1,12 +1,13 @@
 const packageJson = require("./package.json");
+const elmJson = require("./elm.json");
 
 const root = "examples/gh-pages";
 
 const info = {
     title: "Elm Image encoding and decoding",
     description: "Image encoder/decoder in pure Elm, supporting any bit size & interlace for BMP and PNG formats",
-    version: packageJson.version,
-    license: packageJson.license,
+    version: elmJson.version,
+    license: elmJson.license,
     twitterName: "@justgook",
     image: "favicon.png",
     favicon: "examples/gh-pages/favicon.png",
@@ -52,7 +53,7 @@ const buildSocialTags = ({url,   image, title, description, version, license, tw
     },
     twitter: {
         card: "summary_large_image",
-        domain: "z0.lv",
+        // domain: "z0.lv",
         title,
         description,
         image: url + image,
@@ -98,11 +99,11 @@ module.exports = {
                     ].concat(buildSocialTags(info).meta),
                     "title": info.title,
 
-                    "base": [
-                        {
-                            "href": "/"
-                        }
-                    ],
+                    // "base": [
+                    //     {
+                    //         "href": "/"
+                    //     }
+                    // ],
                     "link": [
                         { "rel": "icon", "href": info.favicon },
                         { "rel": "stylesheet", href: "app.css" }
@@ -115,7 +116,7 @@ module.exports = {
 
         },
         "posthtml-favicons": {
-            outDir: `${root}/dist/${process.env.GAME}_social`,
+            outDir: `${root}/${process.env.GAME}_social`,
             configuration: {
                 path: `/${process.env.GAME}_social`,                        // Path for overriding default icons path. `string`
                 appName: info.title,                                        // Your application"s name. `string`
@@ -130,9 +131,9 @@ module.exports = {
                 appleStatusBarStyle: "black-translucent",                   // Style for Apple status bar: "black-translucent", "default", "black". `string`
                 display: "fullscreen",                                      // Preferred display mode: "fullscreen", "standalone", "minimal-ui" or "browser". `string`
                 orientation: "any",                                         // Default orientation: "any", "natural", "portrait" or "landscape". `string`
-                scope: "/",                                                 // set of URLs that the browser considers within your app
-                start_url: `/dist/${process.env.GAME}`,                     // Start URL when launching the application from a device. `string`
-                version: "1.0",                                             // Your application"s version string. `string`
+                scope: "",                                                  // set of URLs that the browser considers within your app
+                start_url: ``,                                              // Start URL when launching the application from a device. `string`
+                version: `${info.version}`,                                 // Your application"s version string. `string`
                 logging: false,                                             // Print logs to console? `boolean`
                 pixel_art: false,                                           // Keeps pixels "sharp" when scaling up, for pixel art.  Only supported in offline mode.
                 loadManifestWithCredentials: false,                         // Browsers don"t send cookies when fetching a manifest, enable this to fix that. `boolean`

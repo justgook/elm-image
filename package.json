@@ -1,8 +1,8 @@
 {
-  "name": "web-tiled",
+  "name": "elm-image",
   "version": "1.0.0",
   "main": "electron.js",
-  "repository": "https://github.com/justgook/elm-math",
+  "repository": "https://github.com/justgook/elm-image",
   "author": "Romans Potasovs",
   "license": "MIT",
   "private": true,
