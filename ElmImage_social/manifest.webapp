@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "4.0.0",
   "name": "Elm Image encoding and decoding",
   "description": "Image encoder/decoder in pure Elm, supporting any bit size & interlace for BMP and PNG formats",
   "icons": {
