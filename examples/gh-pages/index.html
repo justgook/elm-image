@@ -3,8 +3,7 @@
 
 <head>
 
-    <title>Web Tiled</title>
-    <meta charset="utf-8" />
+    <title>ELm Image</title>
     <posthtml-head-elements>
         <script src="./bundle.js"></script>
     </posthtml-head-elements>
@@ -19,7 +18,7 @@
     if (redirect && redirect !== location.href) {
         history.replaceState(null, null, redirect);
     }
-    Elm.Main.init();
+    Elm.Main.init({ node: document.body });
 
 </script>
 </body>
