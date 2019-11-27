@@ -1,49 +1,97 @@
 module Image.Internal.ImageData exposing
-    ( Image(..)
+    ( EncodeOptions
+    , Image(..)
     , Order(..)
     , PixelFormat(..)
+    , bytesPerPixel
     , defaultOptions
     , dimensions
-    , metaFromInfo
-    , options
-    , setOptions
+    , eval
+    , forceColor
+    , getInfo
+    , map
     , toArray
     , toArray2d
     , toList
     , toList2d
-    , width_
+    , width
     )
 
 import Array exposing (Array)
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
+import Image.Info as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Info(..), PngColor(..))
 import Image.Internal.Array2D as Array2D
 
 
 type Image
-    = List Metadata Options (List Int)
-    | List2d Metadata Options (List (List Int))
-    | Array Metadata Options (Array Int)
-    | Array2d Metadata Options (Array (Array Int))
-    | Bytes Metadata Options (Decoder Image) Bytes
+    = List Info (List Int)
+    | List2d Info (List (List Int))
+    | Array Info (Array Int)
+    | Array2d Info (Array (Array Int))
+    | Bytes Info (Decoder Image) Bytes
 
 
-type alias Metadata =
-    { width : Int
-    , height : Int
-    }
+eval : Image -> Image
+eval image =
+    case image of
+        Bytes _ d b ->
+            case D.decode d b of
+                Just (Bytes _ _ _) ->
+                    image
+
+                Just newData ->
+                    newData
+
+                Nothing ->
+                    image
+
+        _ ->
+            image
 
 
-metaFromInfo : { a | width : b, height : c } -> { width : b, height : c }
-metaFromInfo info =
-    { width = info.width
-    , height = info.height
-    }
+forceColor : Metadata.FromDataColor -> Image -> Image
+forceColor color image =
+    case image of
+        List meta im ->
+            List (toFromData color meta) im
+
+        List2d meta im ->
+            List2d (toFromData color meta) im
+
+        Array meta im ->
+            Array (toFromData color meta) im
+
+        Array2d meta im ->
+            Array2d (toFromData color meta) im
+
+        Bytes _ d b ->
+            case D.decode d b of
+                Just (Bytes _ _ _) ->
+                    image
+
+                Just newData ->
+                    forceColor color newData
+
+                Nothing ->
+                    image
 
 
-type alias Options =
+toFromData : Metadata.FromDataColor -> Info -> Info
+toFromData color meta =
+    let
+        dim =
+            Metadata.dimensions meta
+    in
+    FromData
+        { width = dim.width
+        , height = dim.height
+        , color = color
+        }
+
+
+type alias EncodeOptions =
     { format : PixelFormat
-    , defaultColor : Int
     , order : Order
     }
 
@@ -65,70 +113,59 @@ type Order
 
 
 {-| -}
-defaultOptions : Options
+defaultOptions : EncodeOptions
 defaultOptions =
     { format = RGBA
-    , defaultColor = 0xFFFFFFFF
     , order = RightDown
     }
 
 
-options : Image -> Options
-options image =
+{-| -}
+map : (Int -> Int) -> Image -> Image
+map fn image =
     case image of
-        List _ opt _ ->
-            opt
+        List meta l ->
+            List meta (List.map fn l)
 
-        List2d _ opt _ ->
-            opt
+        List2d meta l ->
+            List2d meta (List.map (List.map fn) l)
 
-        Array _ opt _ ->
-            opt
+        Array meta arr ->
+            Array meta (Array.map fn arr)
 
-        Array2d _ opt _ ->
-            opt
+        Array2d meta arr ->
+            Array2d meta (Array.map (Array.map fn) arr)
 
-        Bytes _ opt _ _ ->
-            opt
+        Bytes meta d b ->
+            case D.decode d b of
+                Just (Bytes _ _ _) ->
+                    Bytes meta d b
 
+                Just newData ->
+                    map fn newData
 
-setOptions : Options -> Image -> Image
-setOptions opt image =
-    case image of
-        List meta _ b ->
-            List meta opt b
-
-        List2d meta _ a ->
-            List2d meta opt a
-
-        Array meta _ b ->
-            Array meta opt b
-
-        Array2d meta _ a ->
-            Array2d meta opt a
-
-        Bytes meta _ a b ->
-            Bytes meta opt a b
+                Nothing ->
+                    Bytes meta d b
 
 
 toList : Image -> List Int
-toList info =
-    case info of
-        List _ _ l ->
+toList image =
+    case image of
+        List _ l ->
             l
 
-        List2d _ _ l ->
+        List2d _ l ->
             List.concat l
 
-        Array _ _ arr ->
+        Array _ arr ->
             Array.toList arr
 
-        Array2d _ _ arr ->
+        Array2d _ arr ->
             Array.foldr (\line acc1 -> Array.foldr (\px acc2 -> px :: acc2) acc1 line) [] arr
 
-        Bytes _ _ d b ->
+        Bytes _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _ _) ->
+                Just (Bytes _ _ _) ->
                     []
 
                 Just newData ->
@@ -141,16 +178,16 @@ toList info =
 toList2d : Image -> List (List Int)
 toList2d info =
     case info of
-        List { width } _ l ->
-            greedyGroupsOf width l
+        List meta l ->
+            greedyGroupsOf (Metadata.dimensions meta).width l
 
-        List2d _ _ l ->
+        List2d _ l ->
             l
 
-        Array { width } _ arr ->
-            Array.toList arr |> greedyGroupsOf width
+        Array meta arr ->
+            Array.toList arr |> greedyGroupsOf (Metadata.dimensions meta).width
 
-        Array2d _ _ arr ->
+        Array2d _ arr ->
             Array.foldr
                 (\line acc1 ->
                     Array.foldr (\px acc2 -> px :: acc2) [] line
@@ -159,9 +196,9 @@ toList2d info =
                 []
                 arr
 
-        Bytes _ _ d b ->
+        Bytes _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _ _) ->
+                Just (Bytes _ _ _) ->
                     []
 
                 Just newData ->
@@ -174,21 +211,21 @@ toList2d info =
 toArray : Image -> Array Int
 toArray image =
     case image of
-        List _ _ l ->
+        List _ l ->
             Array.fromList l
 
-        List2d _ _ l ->
+        List2d _ l ->
             List.foldl (Array.fromList >> (\a b -> Array.append b a)) Array.empty l
 
-        Array _ _ arr ->
+        Array _ arr ->
             arr
 
-        Array2d _ _ arr ->
+        Array2d _ arr ->
             Array.foldl Array.append Array.empty arr
 
-        Bytes _ _ d b ->
+        Bytes _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _ _) ->
+                Just (Bytes _ _ _) ->
                     Array.empty
 
                 Just newData ->
@@ -200,47 +237,22 @@ toArray image =
 
 toArray2d : Image -> Array (Array Int)
 toArray2d image =
-    let
-        fromList w l acc =
-            case l of
-                a :: rest ->
-                    let
-                        newAcc =
-                            applyIf (Array2D.lastLength acc >= w) (Array.push Array.empty) acc
-                    in
-                    fromList w rest (Array2D.push a newAcc)
-
-                [] ->
-                    acc
-
-        fromArray : Int -> Array a -> Array (Array a) -> Array (Array a)
-        fromArray w arr acc =
-            if Array.length arr > w then
-                let
-                    ( a1, a2 ) =
-                        splitAt w arr
-                in
-                fromArray w a2 (Array.push a1 acc)
-
-            else
-                Array.push arr acc
-    in
     case image of
-        List { width } _ l ->
-            fromList width l (Array.fromList [ Array.empty ])
+        List meta l ->
+            fromList (Metadata.dimensions meta).width l (Array.fromList [ Array.empty ])
 
-        List2d _ _ l ->
+        List2d _ l ->
             List.foldl (Array.fromList >> Array.push) Array.empty l
 
-        Array { width } _ arr ->
-            fromArray width arr Array.empty
+        Array meta arr ->
+            fromArray (Metadata.dimensions meta).width arr Array.empty
 
-        Array2d _ _ arr ->
+        Array2d _ arr ->
             arr
 
-        Bytes _ _ d b ->
+        Bytes _ d b ->
             case D.decode d b of
-                Just (Bytes _ _ _ _) ->
+                Just (Bytes _ _ _) ->
                     Array.empty
 
                 Just newData ->
@@ -250,42 +262,59 @@ toArray2d image =
                     Array.empty
 
 
+fromList w l acc =
+    case l of
+        a :: rest ->
+            let
+                newAcc =
+                    applyIf (Array2D.lastLength acc >= w) (Array.push Array.empty) acc
+            in
+            fromList w rest (Array2D.push a newAcc)
+
+        [] ->
+            acc
+
+
+fromArray : Int -> Array a -> Array (Array a) -> Array (Array a)
+fromArray w arr acc =
+    if Array.length arr > w then
+        let
+            ( a1, a2 ) =
+                splitAt w arr
+        in
+        fromArray w a2 (Array.push a1 acc)
+
+    else
+        Array.push arr acc
+
+
+getInfo : Image -> Info
+getInfo image =
+    case image of
+        Bytes meta _ _ ->
+            meta
+
+        Array2d meta _ ->
+            meta
+
+        List2d meta _ ->
+            meta
+
+        Array meta _ ->
+            meta
+
+        List meta _ ->
+            meta
+
+
 dimensions : Image -> { width : Int, height : Int }
 dimensions image =
-    case image of
-        Bytes meta _ _ _ ->
-            meta
-
-        Array2d meta _ _ ->
-            meta
-
-        List2d meta _ _ ->
-            meta
-
-        Array meta _ _ ->
-            meta
-
-        List meta _ _ ->
-            meta
+    getInfo image |> Metadata.dimensions
 
 
-width_ : Image -> Int
-width_ info =
-    case info of
-        Bytes { width } _ _ _ ->
-            width
-
-        Array2d { width } _ _ ->
-            width
-
-        List2d { width } _ _ ->
-            width
-
-        Array { width } _ _ ->
-            width
-
-        List { width } _ _ ->
-            width
+width : Image -> Int
+width image =
+    (dimensions image).width
 
 
 applyIf : Bool -> (a -> a) -> a -> a
@@ -339,3 +368,55 @@ greedyGroupsOfWithStep size step xs =
 
     else
         []
+
+
+bytesPerPixel : Info -> Int
+bytesPerPixel meta =
+    case meta of
+        Png { color } ->
+            case color of
+                Greyscale _ ->
+                    1
+
+                GreyscaleAlpha _ ->
+                    2
+
+                TrueColour _ ->
+                    3
+
+                TrueColourAlpha _ ->
+                    4
+
+                IndexedColour _ ->
+                    4
+
+        Bmp { bitsPerPixel } ->
+            case bitsPerPixel of
+                BmpBitsPerPixel8 ->
+                    1
+
+                BmpBitsPerPixel16 ->
+                    2
+
+                BmpBitsPerPixel24 ->
+                    3
+
+                BmpBitsPerPixel32 ->
+                    4
+
+        FromData { color } ->
+            case color of
+                FromDataChannel1 _ ->
+                    1
+
+                FromDataChannel2 _ ->
+                    2
+
+                FromDataChannel3 _ ->
+                    3
+
+                FromDataChannel4 _ ->
+                    4
+
+        Gif _ ->
+            1

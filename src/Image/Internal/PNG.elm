@@ -1,6 +1,7 @@
 module Image.Internal.PNG exposing (decode, encode)
 
 --https://www.w3.org/TR/PNG-Structure.html
+--https://www.w3.org/TR/PNG/
 
 import Array exposing (Array)
 import Bitwise
@@ -8,28 +9,21 @@ import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder)
 import Flate exposing (crc32, deflateZlib, inflateZlib)
+import Image.Info as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngInfo)
 import Image.Internal.Array2D as Array2d exposing (Array2D)
 import Image.Internal.Decode as D
-import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..), defaultOptions)
+import Image.Internal.ImageData as ImageData exposing (EncodeOptions, Image(..), Order(..), PixelFormat(..), defaultOptions)
+
+
+type alias PngEncodeOptions =
+    { color : PngColor }
 
 
 encode : Image -> Bytes
 encode imgData =
     let
         opt =
-            ImageData.options imgData
-
-        signature =
-            E.sequence
-                [ E.unsignedInt8 137
-                , E.unsignedInt8 80
-                , E.unsignedInt8 78
-                , E.unsignedInt8 71
-                , E.unsignedInt8 13
-                , E.unsignedInt8 10
-                , E.unsignedInt8 26
-                , E.unsignedInt8 10
-                ]
+            defaultOptions
 
         arr =
             ImageData.toArray2d imgData
@@ -38,30 +32,37 @@ encode imgData =
             Array.length arr
 
         width =
-            Array.get 0 arr
-                |> Maybe.map Array.length
-                |> Maybe.withDefault 0
-
-        chunkIHDRType =
-            1229472850
-
-        chunkIENDType =
-            1229278788
-
-        chunkIDATType =
-            1229209940
+            Array.get 0 arr |> Maybe.map Array.length |> Maybe.withDefault 0
 
         chunkIHDR =
-            encodeChunk chunkIHDRType (encodeIHDR width height opt |> E.encode)
+            encodeChunk 1229472850 (encodeIHDR width height opt |> E.encode)
 
         chunkIDAT =
-            encodeChunk chunkIDATType (encodeIDAT opt arr |> E.encode)
+            encodeChunk 1229209940 (encodeIDAT opt arr |> E.encode)
 
         chunkIEND =
-            encodeChunk chunkIENDType (E.sequence [] |> E.encode)
+            encodeChunk 1229278788 (E.sequence [] |> E.encode)
     in
-    E.sequence [ signature, chunkIHDR, chunkIDAT, chunkIEND ]
+    E.sequence
+        [ encodeSignature
+        , chunkIHDR
+        , chunkIDAT
+        , chunkIEND
+        ]
         |> E.encode
+
+
+encodeSignature =
+    E.sequence
+        [ E.unsignedInt8 137
+        , E.unsignedInt8 80
+        , E.unsignedInt8 78
+        , E.unsignedInt8 71
+        , E.unsignedInt8 13
+        , E.unsignedInt8 10
+        , E.unsignedInt8 26
+        , E.unsignedInt8 10
+        ]
 
 
 encodeChunk : Int -> Bytes -> Encoder
@@ -205,66 +206,52 @@ encodeIHDR width height { format } =
         ]
 
 
-decode : Bytes -> Maybe { width : Int, height : Int, data : Image }
+{-| DECODE STARTS HERE
+-}
+decode : Bytes -> Maybe Image
 decode bytes =
-    let
-        chunksLength =
-            Bytes.width bytes - 8
+    D.decode (mainDecoder <| Bytes.width bytes - 8) bytes
 
-        decoder =
-            D.listR 8 D.unsignedInt8
-                |> D.andThen
-                    (\signature ->
-                        if signature == [ 10, 26, 10, 13, 71, 78, 80, 137 ] then
-                            D.succeed ()
 
-                        else
-                            D.fail
-                    )
-                |> D.andThen (\_ -> chunkLoopR chunksLength decodeChunk)
-                |> D.andThen
-                    (\image_ ->
-                        case image_ of
-                            Just image ->
-                                case image.data of
-                                    ImageData data ->
-                                        D.succeed
-                                            { width = image.header.width
-                                            , height = image.header.height
-                                            , data = data
-                                            }
+mainDecoder : Int -> Decoder Image
+mainDecoder chunksLength =
+    D.listR 8 D.unsignedInt8
+        |> D.andThen
+            (\signature ->
+                if signature == [ 10, 26, 10, 13, 71, 78, 80, 137 ] then
+                    D.succeed ()
 
-                                    _ ->
-                                        D.fail
+                else
+                    D.fail
+            )
+        |> D.andThen (\_ -> chunkLoopR chunksLength decodeChunk)
+        |> D.andThen
+            (\maybeImage ->
+                case maybeImage of
+                    Just image ->
+                        case image.data of
+                            ImageData data ->
+                                D.succeed data
 
                             _ ->
                                 D.fail
-                    )
-    in
-    --137 80 78 71 13 10 26 10
-    D.decode decoder bytes
 
-
-
---type alias Chunk_ =
---    { length : Int
---    , kind : Int
---    , data : Bytes
---    }
+                    _ ->
+                        D.fail
+            )
 
 
 type alias PNG =
-    { header :
-        { width : Int
-        , height : Int
-        , depth : Int
-        , color : Int
-        , compression : Int
-        , filter : Int
-        , interlace : Int
-        }
+    { header : PngInfo
     , data : Pixels
+
+    {- There shall not be more than one PLTE chunk. -}
+    , palette : Palette
     }
+
+
+type alias Palette =
+    Array Int
 
 
 type Pixels
@@ -280,18 +267,17 @@ decodeChunk acc =
             (\length ->
                 D.map2
                     (\kindAndData crc ->
-                        if crc32 kindAndData == crc then
-                            D.decode
-                                (D.andThen (chunkCollector length acc) (D.unsignedInt32 BE))
-                                kindAndData
-                                |> Maybe.map D.succeed
-                                |> Maybe.withDefault D.fail
-                                -- `length` 4-byte unsigned integer giving the number of bytes in the chunk's data field.
-                                -- The length counts only the data field, not itself, the chunk type code, or the CRC.
-                                |> D.map (Tuple.pair (length + 12))
-
-                        else
-                            D.fail
+                        --                        if crc32 kindAndData == crc then
+                        D.decode
+                            (D.andThen (chunkCollector length acc) (D.unsignedInt32 BE))
+                            kindAndData
+                            |> Maybe.map D.succeed
+                            |> Maybe.withDefault D.fail
+                            -- `length` 4-byte unsigned integer giving the number of bytes in the chunk's data field.
+                            -- The length counts only the data field, not itself, the chunk type code, or the CRC.
+                            |> D.map (Tuple.pair (length + 12))
+                     --                        else
+                     --                            D.fail
                     )
                     (D.bytes (length + 4))
                     (D.unsignedInt32 BE)
@@ -305,19 +291,17 @@ decodeChunk acc =
 
 chunkCollector : Int -> Maybe PNG -> Int -> Decoder (Maybe PNG)
 chunkCollector length acc kind =
-    --    let
-    --        chunkIHDR =
-    --            1229472850
-    --
-    --        chunkIDAT =
-    --            1229209940
-    --
-    --        chunkIEND =
-    --            1229278788
-    --    in
     case ( acc, kind, length ) of
         ( Nothing, 1229472850, 13 ) ->
             decodeIHDR
+                |> D.map Just
+
+        ( Just image, 1347179589, _ ) ->
+            decodePLTE image length
+                |> D.map Just
+
+        ( Just image, 1951551059, _ ) ->
+            decode_tRNS image length
                 |> D.map Just
 
         ( Just image, 1229209940, _ ) ->
@@ -331,6 +315,82 @@ chunkCollector length acc kind =
         ( Just image, _, _ ) ->
             decodeUnknown kind image length
                 |> D.map Just
+
+        _ ->
+            D.fail
+
+
+{-|
+
+    Width:              4 bytes
+    Height:             4 bytes
+    Bit depth:          1 byte
+    Color type:         1 byte
+    Compression method: 1 byte
+    Filter method:      1 byte
+    Interlace method:   1 byte
+
+-}
+decodeIHDR : Decoder PNG
+decodeIHDR =
+    D.succeed
+        (\width height color _ _ adam7 ->
+            { header =
+                { width = width
+                , height = height
+                , color = color
+                , adam7 = adam7
+                }
+            , data = None
+            , palette = Array.empty
+            }
+        )
+        |> D.andMap (D.unsignedInt32 BE)
+        |> D.andMap (D.unsignedInt32 BE)
+        |> D.andMap decodeIHDRColor
+        |> D.andMap D.unsignedInt8
+        |> D.andMap D.unsignedInt8
+        |> D.andMap decodeInterlace
+
+
+decodeInterlace : Decoder Bool
+decodeInterlace =
+    D.unsignedInt8
+        |> D.andThen
+            (\interlace ->
+                case interlace of
+                    0 ->
+                        D.succeed False
+
+                    1 ->
+                        D.succeed True
+
+                    _ ->
+                        D.fail
+            )
+
+
+decodePLTE : PNG -> Int -> Decoder PNG
+decodePLTE image length =
+    D.array (length // 3) (D.unsignedInt24 BE)
+        |> D.map (\palette -> { image | palette = palette })
+
+
+decode_tRNS : PNG -> Int -> Decoder PNG
+decode_tRNS image length =
+    --  https://www.w3.org/TR/PNG/#11tRNS
+    case image.header.color of
+        IndexedColour _ ->
+            D.foldl length
+                (\( i, acc ) ->
+                    D.unsignedInt8
+                        |> D.map
+                            (\alpha ->
+                                ( i + 1, arrayExtraUpdate i (Bitwise.shiftLeftBy 8 >> Bitwise.or alpha >> Bitwise.shiftRightZfBy 0) acc )
+                            )
+                )
+                ( 0, image.palette )
+                |> D.map (\( _, palette ) -> { image | palette = palette })
 
         _ ->
             D.fail
@@ -354,7 +414,7 @@ decodeIDAT image length =
 
 
 decodeIEND : PNG -> Int -> Decoder PNG
-decodeIEND ({ header } as image) length =
+decodeIEND ({ header, palette } as image) length =
     D.bytes length
         |> D.andThen
             (\_ ->
@@ -368,66 +428,331 @@ decodeIEND ({ header } as image) length =
                                 Bytes.width bytes
 
                             decoder =
-                                dataDecoder header.width header.height total
+                                imageDecoder header palette total
                         in
-                        D.succeed { image | data = ImageData (Bytes { width = header.width, height = header.height } defaultOptions decoder bytes) }
+                        D.succeed { image | data = ImageData (Bytes (Metadata.Png header) decoder bytes) }
 
                     _ ->
                         D.fail
             )
 
 
-dataDecoder : Int -> Int -> Int -> Decoder Image
-dataDecoder width height total =
+imageDecoder : PngInfo -> Palette -> Int -> Decoder Image
+imageDecoder ({ width, height, color } as header) palette total =
     D.bytes total
         |> D.andThen
-            (\bytes ->
-                let
-                    {- 0       1,2,4,8,16  Each pixel is a grayscale sample.
-
-                       2       8,16        Each pixel is an R,G,B triple.
-
-                       3       1,2,4,8     Each pixel is a palette index;
-                                           a PLTE chunk must appear.
-
-                       4       8,16        Each pixel is a grayscale sample,
-                                           followed by an alpha sample.
-
-                       6       8,16        Each pixel is an R,G,B triple,
-                                           followed by an alpha sample.
-                    -}
-                    pxDecode =
-                        pixelDecode32
-                in
-                bytes
-                    |> inflateZlib
-                    |> Maybe.andThen (D.decode (decodeImageData pxDecode width height))
-                    |> Maybe.map (Array2d { width = width, height = height } defaultOptions >> D.succeed)
-                    |> Maybe.withDefault D.fail
+            (inflateZlib
+                >> Maybe.andThen (D.decode (dataDecode header palette))
+                >> Maybe.map D.succeed
+                >> Maybe.withDefault D.fail
             )
 
 
-decodeImageData : (Int -> Array2D a -> Decoder (Array2D a)) -> Int -> Int -> Decoder (Array2D a)
-decodeImageData pxDecode width height =
+dataDecode : PngInfo -> Palette -> Decoder Image
+dataDecode ({ width, height, color } as header) palette =
+    case color of
+        IndexedColour BitDepth1_2_4_8__8 ->
+            dataWrapDecode (indexPixel8Decode palette) width height
+                |> D.map (Array2d (Metadata.Png header))
+
+        GreyscaleAlpha BitDepth8_16__8 ->
+            dataWrapDecode pixel16Decode width height
+                |> D.map (Array2d (Metadata.Png header))
+
+        TrueColourAlpha BitDepth8_16__8 ->
+            dataWrapDecode pixel32Decode width height
+                |> D.map (Array2d (Metadata.Png header))
+
+        _ ->
+            D.fail
+
+
+dataWrapDecode : (Int -> Array2D a -> Decoder (Array2D a)) -> Int -> Int -> Decoder (Array2D a)
+dataWrapDecode pxDecode width height =
     D.foldl height (decodeLine pxDecode width) Array.empty
 
 
 decodeLine : (Int -> Array2D a -> Decoder (Array2D a)) -> Int -> Array2D a -> Decoder (Array2D a)
 decodeLine pxDecode width acc =
-    D.unsignedInt8
+    D.unsignedInt8 |> D.andThen (\filterType -> D.foldl width (pxDecode filterType) (Array.push Array.empty acc))
+
+
+indexPixel8Decode : Palette -> Int -> Array2D Int -> Decoder (Array2D Int)
+indexPixel8Decode palette filterType acc =
+    pixel8DecodePlain filterType acc
         |> D.andThen
-            (\filterType ->
-                D.foldl width (pxDecode filterType) (Array.push Array.empty acc)
+            (\i ->
+                Array.get i palette
+                    |> Maybe.map (\c -> Array2d.push c acc |> D.succeed)
+                    |> Maybe.withDefault D.fail
             )
 
 
-pixelDecode32 : Int -> Array2D Int -> Decoder (Array2D Int)
-pixelDecode32 filterType acc =
-    D.map4
-        (\a_ b_ g_ r_ ->
+
+--pixel8Decode : Int -> Array2D Int -> Decoder (Array2D Int)
+--pixel8Decode filterType acc =
+--    pixel8DecodePlain filterType acc
+--        |> D.map (\a -> Array2d.push a acc)
+
+
+pixel8DecodePlain : Int -> Array2D Int -> Decoder Int
+pixel8DecodePlain filterType acc =
+    case filterType of
+        0 ->
+            pixelDecode8None_
+
+        1 ->
+            pixelDecode8Sub_ acc
+
+        2 ->
+            pixelDecode8Up_ acc
+
+        4 ->
+            pixelDecode8Paeth_ acc
+
+        _ ->
+            pixelDecode8None_
+
+
+pixel16Decode : Int -> Array2D Int -> Decoder (Array2D Int)
+pixel16Decode filterType acc =
+    (case filterType of
+        0 ->
+            pixelDecode16None_
+
+        1 ->
+            pixelDecode16Sub_ acc
+
+        2 ->
+            pixelDecode16Up_ acc
+
+        4 ->
+            pixelDecode16Paeth_ acc
+
+        _ ->
+            pixelDecode16None_
+    )
+        |> D.map (\a -> Array2d.push a acc)
+
+
+pixel32Decode : Int -> Array2D Int -> Decoder (Array2D Int)
+pixel32Decode filterType acc =
+    (case filterType of
+        0 ->
+            pixelDecode32None_
+
+        1 ->
+            pixelDecode32Sub_ acc
+
+        2 ->
+            pixelDecode32Up_ acc
+
+        4 ->
+            pixelDecode32Paeth_ acc
+
+        _ ->
+            pixelDecode32None_
+    )
+        |> D.map (\a -> Array2d.push a acc)
+
+
+pixelDecode8None_ =
+    D.unsignedInt8
+
+
+pixelDecode8Sub_ acc =
+    D.map
+        (\a_ ->
             let
                 prev =
-                    Array2d.last acc
+                    Array2d.last acc |> Maybe.withDefault 0
+
+                prevA =
+                    prev |> Bitwise.and 0xFF
+
+                a =
+                    a_ + prevA
+            in
+            a
+        )
+        D.unsignedInt8
+
+
+pixelDecode8Up_ acc =
+    D.map
+        (\a_ ->
+            let
+                prev =
+                    arrayUp acc
+                        |> Maybe.withDefault 0
+
+                prevA =
+                    prev |> Bitwise.and 0xFF
+
+                a =
+                    a_ + prevA
+            in
+            a
+        )
+        D.unsignedInt8
+
+
+pixelDecode8Paeth_ acc =
+    D.map
+        (\a_ ->
+            let
+                ( prevA_, prevB_, prevC_ ) =
+                    arrayPaeth acc
+
+                prevA =
+                    paeth
+                        (Bitwise.and 0xFF prevA_)
+                        (Bitwise.and 0xFF prevB_)
+                        (Bitwise.and 0xFF prevC_)
+
+                a =
+                    a_ + prevA
+            in
+            a
+        )
+        D.unsignedInt8
+
+
+pixelDecode16None_ =
+    D.unsignedInt16 BE
+
+
+pixelDecode16Sub_ acc =
+    D.map2
+        (\b_ a_ ->
+            let
+                prev =
+                    Array2d.last acc |> Maybe.withDefault 0
+
+                prevA =
+                    prev |> Bitwise.and 0xFF
+
+                prevB =
+                    prev |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF
+
+                a =
+                    a_ + prevA
+
+                b =
+                    b_ + prevB
+            in
+            packIntoInt16 b a
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+pixelDecode16Up_ acc =
+    D.map2
+        (\b_ a_ ->
+            let
+                prev =
+                    arrayUp acc
+                        |> Maybe.withDefault 0
+
+                prevA =
+                    prev |> Bitwise.and 0xFF
+
+                prevB =
+                    prev |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF
+
+                a =
+                    a_ + prevA
+
+                b =
+                    b_ + prevB
+            in
+            packIntoInt16 b a
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+pixelDecode16Paeth_ acc =
+    D.map2
+        (\b_ a_ ->
+            let
+                ( prevA_, prevB_, prevC_ ) =
+                    arrayPaeth acc
+
+                prevA =
+                    paeth
+                        (Bitwise.and 0xFF prevA_)
+                        (Bitwise.and 0xFF prevB_)
+                        (Bitwise.and 0xFF prevC_)
+
+                prevB =
+                    paeth
+                        (prevA_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+                        (prevB_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+                        (prevC_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+
+                a =
+                    a_ + prevA
+
+                b =
+                    b_ + prevB
+            in
+            packIntoInt16 b a
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+pixelDecode32None_ =
+    D.unsignedInt32 BE
+
+
+pixelDecode32Sub_ acc =
+    D.map4
+        (\r_ g_ b_ a_ ->
+            let
+                prev =
+                    Array2d.last acc |> Maybe.withDefault 0
+
+                prevA =
+                    prev |> Bitwise.and 0xFF
+
+                prevB =
+                    prev |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF
+
+                prevG =
+                    prev |> Bitwise.shiftRightBy 16 |> Bitwise.and 0xFF
+
+                prevR =
+                    prev |> Bitwise.shiftRightZfBy 24
+
+                a =
+                    a_ + prevA
+
+                b =
+                    b_ + prevB
+
+                g =
+                    g_ + prevG
+
+                r =
+                    r_ + prevR
+            in
+            packIntoInt32 r g b a
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+pixelDecode32Up_ acc =
+    D.map4
+        (\r_ g_ b_ a_ ->
+            let
+                prev =
+                    arrayUp acc
                         |> Maybe.withDefault 0
 
                 prevA =
@@ -443,23 +768,122 @@ pixelDecode32 filterType acc =
                     prev |> Bitwise.shiftRightZfBy 24
 
                 a =
-                    a_ + prevA * filterType
+                    a_ + prevA
 
                 b =
-                    b_ + prevB * filterType
+                    b_ + prevB
 
                 g =
-                    g_ + prevG * filterType
+                    g_ + prevG
 
                 r =
-                    r_ + prevR * filterType
+                    r_ + prevR
             in
-            Array2d.push (packIntoInt32 r g b a) acc
+            packIntoInt32 r g b a
         )
         D.unsignedInt8
         D.unsignedInt8
         D.unsignedInt8
         D.unsignedInt8
+
+
+pixelDecode32Paeth_ acc =
+    D.map4
+        (\r_ g_ b_ a_ ->
+            let
+                ( prevA_, prevB_, prevC_ ) =
+                    arrayPaeth acc
+
+                prevA =
+                    paeth
+                        (Bitwise.and 0xFF prevA_)
+                        (Bitwise.and 0xFF prevB_)
+                        (Bitwise.and 0xFF prevC_)
+
+                prevB =
+                    paeth
+                        (prevA_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+                        (prevB_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+                        (prevC_ |> Bitwise.shiftRightBy 8 |> Bitwise.and 0xFF)
+
+                prevG =
+                    paeth
+                        (prevA_ |> Bitwise.shiftRightBy 16 |> Bitwise.and 0xFF)
+                        (prevB_ |> Bitwise.shiftRightBy 16 |> Bitwise.and 0xFF)
+                        (prevC_ |> Bitwise.shiftRightBy 16 |> Bitwise.and 0xFF)
+
+                prevR =
+                    paeth
+                        (prevA_ |> Bitwise.shiftRightBy 24 |> Bitwise.and 0xFF)
+                        (prevB_ |> Bitwise.shiftRightBy 24 |> Bitwise.and 0xFF)
+                        (prevC_ |> Bitwise.shiftRightBy 24 |> Bitwise.and 0xFF)
+
+                a =
+                    a_ + prevA
+
+                b =
+                    b_ + prevB
+
+                g =
+                    g_ + prevG
+
+                r =
+                    r_ + prevR
+            in
+            packIntoInt32 r g b a
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+arrayUp : Array2D a -> Maybe a
+arrayUp arr =
+    Array.get (Array.length arr - 2) arr
+        |> Maybe.andThen (Array.get (Array2d.lastLength arr))
+
+
+arrayPaeth : Array (Array number) -> ( number, number, number )
+arrayPaeth arr =
+    Array.get (Array.length arr - 2) arr
+        |> Maybe.map
+            (\subArr ->
+                let
+                    currentIndex =
+                        Array2d.lastLength arr
+                in
+                ( Array2d.last arr |> Maybe.withDefault 0
+                , Array.get currentIndex subArr |> Maybe.withDefault 0
+                , Array.get (currentIndex - 1) subArr |> Maybe.withDefault 0
+                )
+            )
+        |> Maybe.withDefault ( 0, 0, 0 )
+
+
+paeth : number -> number -> number -> number
+paeth a b c =
+    let
+        p =
+            a + b - c
+
+        pa =
+            abs (p - a)
+
+        pb =
+            abs (p - b)
+
+        pc =
+            abs (p - c)
+    in
+    if pa <= pb && pa <= pc then
+        a
+
+    else if pb <= pc then
+        b
+
+    else
+        c
 
 
 decodeUnknown : Int -> b -> Int -> Decoder b
@@ -469,66 +893,111 @@ decodeUnknown kind image length =
             (\_ ->
                 let
                     _ =
-                        E.encode (E.unsignedInt32 BE kind)
+                        ( E.encode (E.unsignedInt32 BE kind)
                             |> D.decode (D.string 4)
-
-                    --                            |> Debug.log "kind"
+                        , kind
+                        )
+                            |> Debug.log "kind"
                 in
                 image
             )
 
 
-{-|
+decodeIHDRColor : Decoder PngColor
+decodeIHDRColor =
+    D.map2
+        (\depth color ->
+            case color of
+                0 ->
+                    D.map Greyscale (fromIntBitDepth1_2_4_8_16 depth)
 
-    Width:              4 bytes
-    Height:             4 bytes
-    Bit depth:          1 byte
-    Color type:         1 byte
-    Compression method: 1 byte
-    Filter method:      1 byte
-    Interlace method:   1 byte
+                2 ->
+                    D.map TrueColour (fromIntBitDepth8_16 depth)
 
--}
-decodeIHDR : Decoder PNG
-decodeIHDR =
-    D.succeed
-        (\width height depth color compression filter interlace ->
-            { header =
-                { width = width
-                , height = height
-                , depth = depth
-                , color = color
-                , compression = compression
-                , filter = filter
-                , interlace = interlace
-                }
-            , data = None
-            }
+                3 ->
+                    D.map IndexedColour (fromIntBitDepth1_2_4_8 depth)
+
+                4 ->
+                    D.map GreyscaleAlpha (fromIntBitDepth8_16 depth)
+
+                6 ->
+                    D.succeed (TrueColourAlpha BitDepth8_16__8)
+
+                _ ->
+                    D.fail
         )
-        |> D.andMap (D.unsignedInt32 BE)
-        |> D.andMap (D.unsignedInt32 BE)
-        |> D.andMap D.unsignedInt8
-        |> D.andMap D.unsignedInt8
-        |> D.andMap D.unsignedInt8
-        |> D.andMap D.unsignedInt8
-        |> D.andMap D.unsignedInt8
+        D.unsignedInt8
+        D.unsignedInt8
+        |> D.andThen identity
+
+
+fromIntBitDepth1_2_4_8_16 i =
+    case i of
+        1 ->
+            D.succeed BitDepth1_2_4_8_16__1
+
+        2 ->
+            D.succeed BitDepth1_2_4_8_16__2
+
+        4 ->
+            D.succeed BitDepth1_2_4_8_16__4
+
+        8 ->
+            D.succeed BitDepth1_2_4_8_16__8
+
+        6 ->
+            D.succeed BitDepth1_2_4_8_16__16
+
+        _ ->
+            D.fail
+
+
+fromIntBitDepth1_2_4_8 i =
+    case i of
+        1 ->
+            D.succeed BitDepth1_2_4_8__1
+
+        2 ->
+            D.succeed BitDepth1_2_4_8__2
+
+        4 ->
+            D.succeed BitDepth1_2_4_8__4
+
+        8 ->
+            D.succeed BitDepth1_2_4_8__8
+
+        _ ->
+            D.fail
+
+
+fromIntBitDepth8_16 i =
+    case i of
+        8 ->
+            D.succeed BitDepth8_16__8
+
+        16 ->
+            D.succeed BitDepth8_16__16
+
+        _ ->
+            D.fail
 
 
 chunkLoopR : number -> (Maybe a -> Decoder ( number, Maybe a )) -> Decoder (Maybe a)
 chunkLoopR length decoder =
-    let
-        listStep decoder_ ( length_, acc ) =
-            decoder_ acc
-                |> D.map
-                    (\( bytesTaken, newAcc ) ->
-                        if length_ - bytesTaken > 0 then
-                            Loop ( length_ - bytesTaken, newAcc )
-
-                        else
-                            Done newAcc
-                    )
-    in
     D.loop ( length, Nothing ) (listStep decoder)
+
+
+listStep : (b -> Decoder ( number, a )) -> ( number, b ) -> Decoder (Step ( number, a ) a)
+listStep decoder_ ( length_, acc ) =
+    decoder_ acc
+        |> D.map
+            (\( bytesTaken, newAcc ) ->
+                if length_ - bytesTaken > 0 then
+                    Loop ( length_ - bytesTaken, newAcc )
+
+                else
+                    Done newAcc
+            )
 
 
 packIntoInt32 : Int -> Int -> Int -> Int -> Int
@@ -547,3 +1016,24 @@ packIntoInt32 r g b a =
 
 --        |> Bitwise.shiftRightZfBy 0
 --        |> Bitwise.and 0xFFFFFFFF
+
+
+packIntoInt16 : Int -> Int -> Int
+packIntoInt16 b a =
+    Bitwise.or
+        (Bitwise.shiftLeftBy 8 (Bitwise.and 0xFF b))
+        (Bitwise.and 0xFF a)
+
+
+arrayExtraUpdate : Int -> (a -> a) -> Array a -> Array a
+arrayExtraUpdate n f a =
+    let
+        element =
+            Array.get n a
+    in
+    case element of
+        Nothing ->
+            a
+
+        Just element_ ->
+            Array.set n (f element_) a

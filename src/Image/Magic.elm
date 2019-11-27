@@ -6,60 +6,43 @@ module Image.Magic exposing (mirror)
 
 -}
 
-import Image.Internal.ImageData as ImageData exposing (Image, Order(..))
+import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..))
 
 
 {-| -}
 mirror : Bool -> Bool -> Image -> Image
 mirror horizontally vertically image =
-    let
-        opt =
-            ImageData.options image
+    case ( image, horizontally, vertically ) of
+        ( List2d meta list2d, True, True ) ->
+            List.foldl (\l acc -> List.reverse l :: acc) [] list2d
+                |> List2d meta
 
-        order =
-            opt.order
-                |> applyIf horizontally flipHorizontally
-                |> applyIf vertically flipVertically
-    in
-    ImageData.setOptions { opt | order = order } image
+        ( List2d meta list2d, True, False ) ->
+            List.map (\l -> List.reverse l) list2d
+                |> List2d meta
 
+        ( List2d meta list2d, False, True ) ->
+            List.reverse list2d
+                |> List2d meta
 
-flipHorizontally : Order -> Order
-flipHorizontally a =
-    case a of
-        RightDown ->
-            LeftDown
+        ( _, False, False ) ->
+            image
 
-        RightUp ->
-            LeftUp
-
-        LeftDown ->
-            RightDown
-
-        LeftUp ->
-            RightUp
+        ( im, _, _ ) ->
+            -- TODO Make rest flips more effective
+            List2d (ImageData.getInfo im) (ImageData.toList2d im)
+                |> mirror horizontally vertically
 
 
-flipVertically : Order -> Order
-flipVertically a =
-    case a of
-        RightDown ->
-            RightUp
 
-        RightUp ->
-            RightDown
+{-
+   use it as
+       Flip True True (Crop 10 10 100 100 (Image Image))
 
-        LeftDown ->
-            LeftUp
-
-        LeftUp ->
-            LeftDown
+-}
 
 
-applyIf : Bool -> (a -> a) -> a -> a
-applyIf bool f a =
-    if bool then
-        f a
-
-    else
-        a
+type Filter
+    = Flip Bool Bool Filter
+    | Crop Int Int Int Int Filter
+    | Image Image

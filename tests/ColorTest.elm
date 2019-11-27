@@ -43,7 +43,7 @@ suite =
 
             process image =
                 image
-                    |> Image.encodeBmp
+                    |> Image.toBmp
                     |> Base64.fromBytes
          in
          [ test "List to Image" <|

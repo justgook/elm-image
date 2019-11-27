@@ -1,11 +1,11 @@
 module Image exposing
     ( Image
     , decode
-    , encodeBmp, encodePng
+    , toPng, toBmp, toPngUrl, toBmpUrl
     , fromList, fromList2d, fromArray, fromArray2d
     , toList, toList2d, toArray, toArray2d
     , dimensions
-    , Width, Height
+    , Pixel, Width, Height
     )
 
 {-|
@@ -20,7 +20,7 @@ module Image exposing
 
 # Encoding
 
-@docs encodeBmp, encodePng
+@docs toPng, toBmp, toPngUrl, toBmpUrl
 
 
 # Construct
@@ -40,27 +40,34 @@ module Image exposing
 
 # Helper Types
 
-@docs Width, Height
+@docs Pixel, Width, Height
 
 -}
 
 import Array exposing (Array)
+import Base64
 import Bytes exposing (Bytes)
+import Image.Advanced
+import Image.Info exposing (FromDataBitDepth(..), FromDataColor(..), Info(..))
 import Image.Internal.BMP as BMP
-import Image.Internal.ImageData exposing (Image(..), defaultOptions)
+import Image.Internal.ImageData exposing (Image(..), PixelFormat(..))
 import Image.Internal.PNG as PNG
 import Maybe exposing (Maybe)
 
 
-{-| Just syntax sugar for easier understanding
--}
+{-| -}
 type alias Width =
     Int
 
 
-{-| Just syntax sugar for easier understanding
--}
+{-| -}
 type alias Height =
+    Int
+
+
+{-| Color encoded as `0xRRGGBBAA`
+-}
+type alias Pixel =
     Int
 
 
@@ -70,68 +77,86 @@ type alias Image =
     Image.Internal.ImageData.Image
 
 
-{-| Create [`Image`](#Image) of `List Int` where each Int is `0xRRGGBBAA`
+{-| Create [`Image`](#Image) of `List Int` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-fromList : Width -> List Int -> Image
+fromList : Width -> List Pixel -> Image
 fromList w l =
-    List { width = w, height = List.length l // w } defaultOptions l
-
-
-{-| Create [`Image`](#Image) of `List (List Int)` where each Int is `0xRRGGBBAA`
--}
-fromList2d : List (List Int) -> Image
-fromList2d l =
-    List2d
-        { width = l |> List.head |> Maybe.map List.length |> Maybe.withDefault 0
-        , height = List.length l
-        }
-        defaultOptions
+    List
+        (FromData
+            { width = w
+            , height = List.length l // w
+            , color = FromDataChannel4 FromDataBitDepth8
+            }
+        )
         l
 
 
-{-| Create [`Image`](#Image) of `Array Int` where each Int is `0xRRGGBBAA`
+{-| Create [`Image`](#Image) of `List (List Int)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-fromArray : Width -> Array Int -> Image
+fromList2d : List (List Pixel) -> Image
+fromList2d l =
+    List2d
+        (FromData
+            { width = l |> List.head |> Maybe.map List.length |> Maybe.withDefault 0
+            , height = List.length l
+            , color = FromDataChannel4 FromDataBitDepth8
+            }
+        )
+        l
+
+
+{-| Create [`Image`](#Image) of `Array Int` where each `Pixel` is `Int` as `0xRRGGBBAA`
+-}
+fromArray : Width -> Array Pixel -> Image
 fromArray w arr =
-    Array { width = w, height = Array.length arr // w } defaultOptions arr
-
-
-{-| Create [`Image`](#Image) of `Array (Array Int)` where each Int is `0xRRGGBBAA`
--}
-fromArray2d : Array (Array Int) -> Image
-fromArray2d arr =
-    Array2d
-        { width = arr |> Array.get 0 |> Maybe.map Array.length |> Maybe.withDefault 0
-        , height = Array.length arr
-        }
-        defaultOptions
+    Array
+        (FromData
+            { width = w
+            , height = Array.length arr // w
+            , color = FromDataChannel4 FromDataBitDepth8
+            }
+        )
         arr
 
 
-{-| Take [`Image`](#Image) of and converts it to `List Int` where each Int is `0xRRGGBBAA`
+{-| Create [`Image`](#Image) of `Array (Array Pixel)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-toList : Image -> List Int
+fromArray2d : Array (Array Pixel) -> Image
+fromArray2d arr =
+    Array2d
+        (FromData
+            { width = arr |> Array.get 0 |> Maybe.map Array.length |> Maybe.withDefault 0
+            , height = Array.length arr
+            , color = FromDataChannel4 FromDataBitDepth8
+            }
+        )
+        arr
+
+
+{-| Take [`Image`](#Image) of and converts it to `List Pixel` where each `Pixel` is `Int` as `0xRRGGBBAA`
+-}
+toList : Image -> List Pixel
 toList =
     Image.Internal.ImageData.toList
 
 
-{-| Take [`Image`](#Image) of and converts it to matrix `List (List Int)` where each Int is `0xRRGGBBAA`
+{-| Take [`Image`](#Image) of and converts it to matrix `List (List Pixel)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-toList2d : Image -> List (List Int)
+toList2d : Image -> List (List Pixel)
 toList2d =
     Image.Internal.ImageData.toList2d
 
 
-{-| Take [`Image`](#Image) of and converts it to `Array Int` where each Int is `0xRRGGBBAA`
+{-| Take [`Image`](#Image) of and converts it to `Array Pixel` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-toArray : Image -> Array Int
+toArray : Image -> Array Pixel
 toArray =
     Image.Internal.ImageData.toArray
 
 
-{-| Take [`Image`](#Image) of and converts it to matrix `Array (Array Int)` where each Int is `0xRRGGBBAA`
+{-| Take [`Image`](#Image) of and converts it to matrix `Array (Array Pixel)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
-toArray2d : Image -> Array (Array Int)
+toArray2d : Image -> Array (Array Pixel)
 toArray2d =
     Image.Internal.ImageData.toArray2d
 
@@ -141,24 +166,51 @@ toArray2d =
 PNG supports palette-based images (with palettes of 24-bit RGB or 32-bit RGBA colors), grayscale images (with or without alpha channel for transparency), and full-color non-palette-based RGB images (with or without alpha channel).
 
 -}
-encodePng : Image -> Bytes
-encodePng =
-    PNG.encode
+toPng : Image -> Bytes
+toPng =
+    Image.Advanced.toPng32
+
+
+{-| Create base64-url that can be used directly as img source (`img [ src <| toPngUrl myImage ]`)
+-}
+toPngUrl : Image -> String
+toPngUrl =
+    Image.Advanced.toPng32 >> Base64.fromBytes >> Maybe.withDefault "" >> (++) "data:image/png;base64,"
 
 
 {-| The BMP file format, also known as bitmap image file or device independent bitmap (DIB) file format or simply a bitmap, is a raster graphics image file format used to store bitmap digital images, independently of the display device (such as a graphics adapter), especially on Microsoft Windows and OS/2 operating systems.
 
-**Note**: Using BMP 32bit is discouraged due to lack of proper support across browsers
+**Note**: Using BMP 32bit is discouraged due to lack of proper support across browsers, so image will be 24bit (no alpha channel)
 
 -}
-encodeBmp : Image -> Bytes
-encodeBmp =
-    BMP.encode
+toBmp : Image -> Bytes
+toBmp =
+    Image.Advanced.toBmp24
+
+
+{-| Create base64-url that can be used directly as img source (`img [ src <| toBmpUrl myImage ]`)
+-}
+toBmpUrl : Image -> String
+toBmpUrl =
+    Image.Advanced.toBmp24 >> Base64.fromBytes >> Maybe.withDefault "" >> (++) "data:image/bmp;base64,"
 
 
 {-| Convert blob of image (`png` or `bmp`) into [`Image`](#Image)
+
+    import Http
+
+    type Msg
+        = GotImage (Result Http.Error (Maybe Image))
+
+    getImage : Cmd Msg
+    getImage =
+        Http.get
+            { url = "/image.png"
+            , expect = Http.expectBytes GotImage Image.decode
+            }
+
 -}
-decode : Bytes -> Maybe { width : Width, height : Height, data : Image }
+decode : Bytes -> Maybe Image
 decode bytes =
     PNG.decode bytes
         |> or (BMP.decode bytes)

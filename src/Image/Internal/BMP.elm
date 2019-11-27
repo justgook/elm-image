@@ -4,125 +4,128 @@ import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder, unsignedInt16, unsignedInt32, unsignedInt8)
+import Image.Info as MetaData exposing (BmpBitsPerPixel(..), BmpInfo)
 import Image.Internal.Decode as D
 import Image.Internal.Encode exposing (unsignedInt24)
-import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..), defaultOptions)
+import Image.Internal.ImageData as ImageData exposing (EncodeOptions, Image(..), Order(..))
 
 
-decode : Bytes -> Maybe { width : Int, height : Int, data : Image }
+decode : Bytes -> Maybe Image
 decode bytes =
-    let
-        decoder =
-            D.string 2
-                |> D.andThen
-                    (\bm ->
-                        if bm == "BM" then
-                            decodeInfo
-                                |> D.andThen
-                                    (\info ->
-                                        let
-                                            decoder_ =
-                                                case info.bitsPerPixel of
-                                                    32 ->
-                                                        Just (decode32 info)
+    D.decode (decoder bytes) bytes
 
-                                                    24 ->
-                                                        Just (decode24 info)
 
-                                                    16 ->
-                                                        Just (decode16 info)
+decoder : Bytes -> Decoder Image
+decoder bytes =
+    D.string 2
+        |> D.andThen
+            (\bm ->
+                if bm == "BM" then
+                    decodeInfo |> D.andThen (\info -> D.succeed (Bytes (MetaData.Bmp info) (imageDecoder info) bytes))
 
-                                                    _ ->
-                                                        Nothing
-                                        in
-                                        case decoder_ of
-                                            Just ddd ->
-                                                D.succeed
-                                                    { width = info.width
-                                                    , height = info.height
-                                                    , data = Bytes (ImageData.metaFromInfo info) defaultOptions ddd bytes
-                                                    }
+                else
+                    D.fail
+            )
 
-                                            _ ->
-                                                D.fail
-                                    )
 
-                        else
-                            D.fail
-                    )
+imageDecoder info =
+    case info.bitsPerPixel of
+        BmpBitsPerPixel32 ->
+            decode32 info
 
-        decodeInfo =
-            D.succeed
-                (\fileSize _ pixelStart dibHeader width height color_planes bitsPerPixel compression dataSize ->
-                    { fileSize = fileSize
-                    , pixelStart = pixelStart
-                    , dibHeader = dibHeader
-                    , width = width
-                    , height = height
-                    , color_planes = color_planes
-                    , bitsPerPixel = bitsPerPixel
-                    , compression = compression
-                    , dataSize = dataSize
-                    }
-                )
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt16 LE)
-                |> D.andMap (D.unsignedInt16 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-                |> D.andMap (D.unsignedInt32 LE)
-    in
-    D.decode decoder bytes
+        BmpBitsPerPixel24 ->
+            decode24 info
+
+        BmpBitsPerPixel16 ->
+            decode16 info
+
+        BmpBitsPerPixel8 ->
+            decode8 info
+
+
+decodeInfo : Decoder BmpInfo
+decodeInfo =
+    D.succeed
+        (\fileSize _ pixelStart dibHeader width height color_planes bitsPerPixel compression dataSize ->
+            { fileSize = fileSize
+            , pixelStart = pixelStart
+            , dibHeader = dibHeader
+            , width = width
+            , height = height
+            , color_planes = color_planes
+            , bitsPerPixel = bitsPerPixel
+            , compression = compression
+            , dataSize = dataSize
+            }
+        )
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt16 LE)
+        |> D.andMap bitsPerPixelDecode
+        |> D.andMap (D.unsignedInt32 LE)
+        |> D.andMap (D.unsignedInt32 LE)
+
+
+bitsPerPixelDecode : Decoder BmpBitsPerPixel
+bitsPerPixelDecode =
+    D.unsignedInt16 LE
+        |> D.andThen
+            (\a ->
+                case a of
+                    8 ->
+                        D.succeed BmpBitsPerPixel8
+
+                    16 ->
+                        D.succeed BmpBitsPerPixel16
+
+                    24 ->
+                        D.succeed BmpBitsPerPixel24
+
+                    32 ->
+                        D.succeed BmpBitsPerPixel32
+
+                    _ ->
+                        D.fail
+            )
 
 
 encode : Image -> Bytes
-encode imageData =
-    let
-        { format, defaultColor, order } =
-            ImageData.options imageData
+encode image =
+    encodeFolder (encodeConfig image) (ImageData.toList2d image) 0 0 []
+        |> E.sequence
+        |> E.encode
 
+
+encodeConfig : Image -> EncodeConfig
+encodeConfig image =
+    let
         bytesPerPixel =
-            bytesPerPixel_ format
+            ImageData.getInfo image |> ImageData.bytesPerPixel
 
         width =
-            ImageData.width_ imageData
+            ImageData.width image
 
-        -- I think this means that the width is rounded up to a multiple of 4
+        -- Width is rounded up to a multiple of 4 (word - 32bit)
         extraBytes =
             Bitwise.and (4 - Bitwise.and (width * bytesPerPixel) bytesPerPixel) bytesPerPixel
                 |> remainderBy 4
 
-        data =
-            ImageData.toList2d imageData
-
-        orderRight =
-            order == RightDown || order == RightUp
-
-        orderUp =
-            order == RightUp || order == LeftUp
-
         encoder =
             intToBytes bytesPerPixel
-
-        config : EncodeConfig
-        config =
-            { bytesPerPixel = bytesPerPixel
-            , width = width
-            , orderRight = orderRight
-            , orderUp = orderUp
-            , format = format
-            , extraBytes = extraBytes
-            , encoder = encoder
-            , defaultColors = List.repeat width (encoder defaultColor)
-            }
     in
-    encodeFolder config data 0 0 []
-        |> E.sequence
-        |> E.encode
+    { bytesPerPixel = bytesPerPixel
+    , width = width
+    , orderRight = True
+    , orderUp = False
+    , header32 = bytesPerPixel == 4
+    , extraBytes = extraBytes
+    , encoder = encoder
+    , defaultColors = List.repeat width (encoder 0x00)
+    }
 
 
 type alias EncodeConfig =
@@ -130,7 +133,7 @@ type alias EncodeConfig =
     , width : Int
     , orderRight : Bool
     , orderUp : Bool
-    , format : ImageData.PixelFormat
+    , header32 : Bool
     , extraBytes : Int
     , encoder : Int -> Encoder
     , defaultColors : List Encoder
@@ -203,7 +206,7 @@ encodeFolder ({ width, extraBytes } as config) remaining height totalBytes acc =
                     else
                         acc
             in
-            if config.format == RGBA then
+            if config.header32 then
                 header32 width height totalBytes body
 
             else
@@ -241,22 +244,6 @@ addRowPadding n acc =
             E.unsignedInt32 LE 0 :: acc
 
 
-bytesPerPixel_ : PixelFormat -> number
-bytesPerPixel_ format =
-    case format of
-        RGBA ->
-            4
-
-        RGB ->
-            3
-
-        LUMINANCE_ALPHA ->
-            2
-
-        ALPHA ->
-            1
-
-
 intToBytes : Int -> (Int -> Encoder)
 intToBytes bpp =
     case bpp of
@@ -271,12 +258,6 @@ intToBytes bpp =
 
         _ ->
             unsignedInt32 Bytes.LE
-
-
-
---header2_4_8 =
---    --    To define colors used by the bitmap image data (Pixel array)      Mandatory for color depths ≤ 8 bits
---    []
 
 
 header16_24 : Int -> Int -> Int -> Int -> List Encoder -> List Encoder
@@ -417,22 +398,29 @@ staticHeaderPart =
         ]
 
 
-decode32 : { a | pixelStart : Int, height : Int, dataSize : Int, width : Int } -> Decoder Image
+decode32 : BmpInfo -> Decoder Image
 decode32 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR (info.dataSize // 4) (D.unsignedInt32 LE))
-        |> D.map (List (ImageData.metaFromInfo info) defaultOptions)
+        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt32 LE) |> D.map List.reverse))
+        |> D.map (List2d (MetaData.Bmp info))
 
 
-decode24 : { a | pixelStart : Int, height : Int, width : Int } -> Decoder Image
+decode24 : BmpInfo -> Decoder Image
 decode24 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt24 LE)))
-        |> D.map (List.concat >> List (ImageData.metaFromInfo info) defaultOptions)
+        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt24 LE) |> D.map List.reverse))
+        |> D.map (List2d (MetaData.Bmp info))
 
 
-decode16 : { a | pixelStart : Int, height : Int, width : Int } -> Decoder Image
+decode16 : BmpInfo -> Decoder Image
 decode16 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt16 LE)))
-        |> D.map (List.concat >> List (ImageData.metaFromInfo info) defaultOptions)
+        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt16 LE) |> D.map List.reverse))
+        |> D.map (List2d (MetaData.Bmp info))
+
+
+decode8 : BmpInfo -> Decoder Image
+decode8 info =
+    D.bytes info.pixelStart
+        |> D.andThen (\_ -> D.listR info.height (D.listR info.width D.unsignedInt8 |> D.map List.reverse))
+        |> D.map (List2d (MetaData.Bmp info))

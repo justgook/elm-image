@@ -16,11 +16,7 @@ push item arr =
 
 last : Array2D a -> Maybe a
 last arr =
-    Array.get (lastIndex_ arr) arr
-        |> Maybe.andThen
-            (\subArr ->
-                Array.get (lastIndex_ subArr) subArr
-            )
+    Array.get (lastIndex_ arr) arr |> Maybe.andThen (\subArr -> Array.get (lastIndex_ subArr) subArr)
 
 
 lastLength : Array (Array a) -> Int

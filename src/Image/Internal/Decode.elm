@@ -1,5 +1,6 @@
-module Image.Internal.Decode exposing (andMap, foldl, listR, unsignedInt24)
+module Image.Internal.Decode exposing (andMap, array, foldl, listR, unsignedInt24)
 
+import Array exposing (Array)
 import Bitwise
 import Bytes exposing (Endianness)
 import Bytes.Decode as D exposing (Decoder, Step(..))
@@ -24,6 +25,20 @@ listStep decoder ( n, xs ) =
         D.map (\x -> Loop ( n - 1, x :: xs )) decoder
 
 
+array : Int -> Decoder a -> Decoder (Array a)
+array count decoder =
+    D.loop ( count, Array.empty ) (arrayStep decoder)
+
+
+arrayStep : Decoder a -> ( Int, Array a ) -> Decoder (Step ( Int, Array a ) (Array a))
+arrayStep decoder ( n, xs ) =
+    if n <= 0 then
+        D.succeed (Done xs)
+
+    else
+        D.map (\x -> Loop ( n - 1, Array.push x xs )) decoder
+
+
 foldl : Int -> (b -> Decoder b) -> b -> Decoder b
 foldl count decoder acc =
     D.loop ( count, acc ) (foldlStep decoder)
@@ -38,17 +53,6 @@ foldlStep decoder ( n, acc ) =
         D.map (\x -> Loop ( n - 1, x )) (decoder acc)
 
 
-
---
---unsignedInt24 : Endianness -> Decoder Int
---unsignedInt24 endian =
---    if endian == Bytes.BE then
---        D.map3 (\x y z -> z + y * 255 + x * 256 * 255) D.unsignedInt8 D.unsignedInt8 D.unsignedInt8
---
---    else
---        D.map2 (\a b -> a + b * 256 * 255) (D.unsignedInt16 Bytes.LE) D.unsignedInt8
-
-
 unsignedInt24 : Endianness -> Decoder Int
 unsignedInt24 endianness =
     case endianness of
@@ -56,4 +60,4 @@ unsignedInt24 endianness =
             D.map2 (\b2 b1 -> Bitwise.or (Bitwise.shiftLeftBy 16 b1) b2) (D.unsignedInt16 endianness) D.unsignedInt8
 
         Bytes.BE ->
-            D.map2 (\b1 b2 -> Bitwise.or (Bitwise.shiftLeftBy 16 b1) b2) (D.unsignedInt16 endianness) D.unsignedInt8
+            D.map2 (\b1 b2 -> Bitwise.or (Bitwise.shiftLeftBy 8 b1) b2 {- |> Bitwise.shiftRightZfBy 0 -}) (D.unsignedInt16 endianness) D.unsignedInt8

@@ -39,7 +39,7 @@ suite =
                 let
                     process image =
                         image
-                            |> Image.encodeBmp
+                            |> Image.toBmp
                             |> Base64.fromBytes
                             |> Maybe.withDefault ""
                 in
@@ -50,7 +50,7 @@ suite =
                 let
                     process image =
                         image
-                            |> Image.encodeBmp
+                            |> Image.toBmp
                             |> Base64.fromBytes
                             |> Maybe.withDefault ""
                 in
@@ -71,7 +71,7 @@ suite =
 
                     process image =
                         image
-                            |> Image.encodeBmp
+                            |> Image.toBmp
                             |> Base64.fromBytes
                             |> Maybe.withDefault ""
                 in
@@ -82,7 +82,7 @@ suite =
                 let
                     process image =
                         image
-                            |> Image.encodePng
+                            |> Image.toPng
                             |> Base64.fromBytes
                             |> Maybe.withDefault ""
                 in

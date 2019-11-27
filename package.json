@@ -1,0 +1,23 @@
+{
+  "name": "web-tiled",
+  "version": "1.0.0",
+  "main": "electron.js",
+  "repository": "https://github.com/justgook/elm-math",
+  "author": "Romans Potasovs",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "posthtml": "posthtml ./examples/gh-pages/index.html -o ./examples/gh-pages/index.html -c posthtml.config.js"
+  },
+  "dependencies": {
+    "htmlnano": "0.2.5",
+    "jscodeshift": "0.6.4",
+    "posthtml-cli": "0.5.1",
+    "posthtml-content": "0.0.2",
+    "posthtml-favicons": "1.3.0",
+    "posthtml-head-elements": "0.5.1",
+    "posthtml-style-to-file": "0.2.0",
+    "prepack": "0.2.54",
+    "uglify-js": "3.7.0"
+  }
+}
