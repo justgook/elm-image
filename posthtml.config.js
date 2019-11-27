@@ -116,9 +116,9 @@ module.exports = {
 
         },
         "posthtml-favicons": {
-            outDir: `${root}/${process.env.GAME}_social`,
+            outDir: `${root}`,
             configuration: {
-                path: `${process.env.GAME}_social`,                        // Path for overriding default icons path. `string`
+                path: `${process.env.GAME}_social`,                         // Path for overriding default icons path. `string`
                 appName: info.title,                                        // Your application"s name. `string`
                 appShortName: process.env.GAME,                             // Your application"s short_name. `string`. Optional. If not set, appName will be used
                 appDescription: info.description,                           // Your application"s description. `string`
@@ -132,8 +132,8 @@ module.exports = {
                 display: "fullscreen",                                      // Preferred display mode: "fullscreen", "standalone", "minimal-ui" or "browser". `string`
                 orientation: "any",                                         // Default orientation: "any", "natural", "portrait" or "landscape". `string`
                 scope: "",                                                  // set of URLs that the browser considers within your app
-                start_url: ``,                                              // Start URL when launching the application from a device. `string`
-                version: `${info.version}`,                                 // Your application"s version string. `string`
+                start_url: "",                                              // Start URL when launching the application from a device. `string`
+                version: info.version,                                      // Your application"s version string. `string`
                 logging: false,                                             // Print logs to console? `boolean`
                 pixel_art: false,                                           // Keeps pixels "sharp" when scaling up, for pixel art.  Only supported in offline mode.
                 loadManifestWithCredentials: false,                         // Browsers don"t send cookies when fetching a manifest, enable this to fix that. `boolean`
