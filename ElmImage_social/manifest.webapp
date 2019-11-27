@@ -3,9 +3,9 @@
   "name": "Elm Image encoding and decoding",
   "description": "Image encoder/decoder in pure Elm, supporting any bit size & interlace for BMP and PNG formats",
   "icons": {
-    "60": "/ElmImage_social/firefox_app_60x60.png",
-    "128": "/ElmImage_social/firefox_app_128x128.png",
-    "512": "/ElmImage_social/firefox_app_512x512.png"
+    "60": "ElmImage_social/firefox_app_60x60.png",
+    "128": "ElmImage_social/firefox_app_128x128.png",
+    "512": "ElmImage_social/firefox_app_512x512.png"
   },
   "developer": {
     "name": null,
