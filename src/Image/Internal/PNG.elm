@@ -897,7 +897,8 @@ decodeUnknown kind image length =
                             |> D.decode (D.string 4)
                         , kind
                         )
-                            |> Debug.log "kind"
+
+                    --                            |> Debug.log "kind"
                 in
                 image
             )
