@@ -118,7 +118,7 @@ module.exports = {
         "posthtml-favicons": {
             outDir: `${root}`,
             configuration: {
-                path: `${process.env.GAME}_social`,                         // Path for overriding default icons path. `string`
+                path: "",                                                   // Path for overriding default icons path. `string`
                 appName: info.title,                                        // Your application"s name. `string`
                 appShortName: process.env.GAME,                             // Your application"s short_name. `string`. Optional. If not set, appName will be used
                 appDescription: info.description,                           // Your application"s description. `string`
