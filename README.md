@@ -40,9 +40,6 @@ Use case:
  - get image header inf (format, color, size..) [`Image.Advanced.info`](Image-Advanced#info)
  - convert image from one format ot other
 
-
-
-
 [package]: https://package.elm-lang.org/packages/justgook/elm-image/latest/
 [demo]: https://justgook.github.io/elm-image/
 [Image]: Image#Image
