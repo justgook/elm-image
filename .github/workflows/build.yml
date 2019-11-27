@@ -1,6 +1,9 @@
-name: CI
+name: Build
 
-on: [push]
+on:
+  push:
+    branches:
+      - master
 
 jobs:
   build:
@@ -9,9 +12,43 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - name: Run a one-line script
-      run: echo Hello, world!
-    - name: Run a multi-line script
+    - name: Setup Node.js for use with actions
+      uses: actions/setup-node@v1.1.0
+      with:
+        node-version: 12.x
+
+    - name: Get yarn cache
+      id: yarn-cache
+      run: echo "::set-output name=dir::$(yarn cache dir)"
+    - uses: actions/cache@v1.0.3
+      id: yarn-cache
+      with:
+        path: ${{ steps.yarn-cache.outputs.dir }}
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-
+
+    - name: Install Dependencies
+      if: steps.yarn-cache.outputs.cache-hit != 'true'
+      run: yarn
+
+    - name: Test
+
+      run: elm-test
+
+    - name: Build
+      working-directory: ./examples
+      run: elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
+
+    - name: Optimize Javascript
       run: |
-        echo Add other actions to build,
-        echo test, and deploy your project.
+        jscodeshift -t transform.js ./examples/gh-pages/bundle.min.js
+        uglifyjs ./examples/gh-pages/bundle.min.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=./examples/gh-pages/bundle.min.js
+        posthtml ./examples/gh-pages/index.html -o ./examples/gh-pages/index.html -c posthtml.config.js
+
+#    - name: Run a one-line script
+#      run: echo Hello, world!
+#    - name: Run a multi-line script
+#      run: |
+#        echo Add other actions to build,
+#        echo test, and deploy your project.
