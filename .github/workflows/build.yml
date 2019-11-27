@@ -21,7 +21,7 @@ jobs:
       id: yarn-cache
       run: echo "::set-output name=dir::$(yarn cache dir)"
     - uses: actions/cache@v1.0.3
-      id: yarn-cache
+      id: yarn-cache-exists
       with:
         path: ${{ steps.yarn-cache.outputs.dir }}
         key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
@@ -29,7 +29,7 @@ jobs:
           ${{ runner.os }}-yarn-
 
     - name: Install Dependencies
-      if: steps.yarn-cache.outputs.cache-hit != 'true'
+      if: steps.yarn-cache-exists.outputs.cache-hit != 'true'
       run: yarn
 
     - name: Test
