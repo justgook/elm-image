@@ -54,8 +54,8 @@ jobs:
         ${{yarn bin}}/elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
       working-directory: examples
 
-    - uses: ./.github/actions/hello-world-action
-      - name: Optimize Javascript
+#    - uses: ./.github/actions/hello-world-action
+    - name: Optimize Javascript
         env:
           NODE_ENV: production
         run: |
