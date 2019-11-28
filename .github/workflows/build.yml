@@ -33,7 +33,7 @@ jobs:
       env:
         ELM_HOME: $HOME/${{ runner.os }}-elm
       with:
-        path: $ELM_HOME
+        path: $HOME/${{ runner.os }}-elm
         key: ${{ runner.os }}-elm-${{ hashFiles('**/elm.json') }}
         restore-keys: |
           ${{ runner.os }}-elm-
