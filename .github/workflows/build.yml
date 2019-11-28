@@ -37,8 +37,8 @@ jobs:
       run: yarn run elm-test
 
     - name: Build
-      run: yarn run elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
-      working-directory: examples
+      run: cd examples && yarn run elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
+#      working-directory: examples
 
 #  - uses: ./.github/actions/hello-world-action
     - name: Optimize Javascript
