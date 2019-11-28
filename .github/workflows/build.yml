@@ -6,10 +6,10 @@ on:
       - master
 
 jobs:
-  build:
-    env:
-      ELM_HOME: $HOME/${{ runner.os }}-elm
+  env:
+    ELM_HOME: $HOME/${{ runner.os }}-elm
 
+  build:
     runs-on: ubuntu-latest
 
     steps:
