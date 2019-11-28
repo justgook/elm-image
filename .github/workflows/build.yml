@@ -6,13 +6,12 @@ on:
       - master
 
 jobs:
-  env:
-    ELM_HOME: $HOME/${{ runner.os }}-elm
-
   build:
     runs-on: ubuntu-latest
 
     steps:
+    - env:
+        ELM_HOME: $HOME/${{ runner.os }}-elm
     - uses: actions/checkout@v1
 
     - name: Setup Node.js for use with actions
