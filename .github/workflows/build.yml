@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - env:
+    - name: My first action
+      env:
         ELM_HOME: $HOME/${{ runner.os }}-elm
     - uses: actions/checkout@v1
 
