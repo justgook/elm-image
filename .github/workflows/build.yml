@@ -10,9 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: My first action
-      env:
-        ELM_HOME: $HOME/${{ runner.os }}-elm
     - uses: actions/checkout@v1
 
     - name: Setup Node.js for use with actions
@@ -20,7 +17,7 @@ jobs:
       with:
         node-version: 12.x
 
-    - name: Get Y qarn cache
+    - name: Get Yarn cache
       id: yarn-cache
       run: echo "::set-output name=dir::$(yarn cache dir)"
     - uses: actions/cache@v1.0.3
@@ -33,6 +30,8 @@ jobs:
 
     - name: Get Elm cache
       uses: actions/cache@v1.0.3
+      env:
+        ELM_HOME: $HOME/${{ runner.os }}-elm
       with:
         path: $ELM_HOME
         key: ${{ runner.os }}-elm-${{ hashFiles('**/elm.json') }}
