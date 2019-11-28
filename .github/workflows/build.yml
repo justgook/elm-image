@@ -12,6 +12,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+
     - name: Setup Node.js for use with actions
       uses: actions/setup-node@v1.1.0
       with:
@@ -37,7 +38,7 @@ jobs:
 
     - name: Build
       run: yarn run elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
-      working-directory: ./examples
+      working-directory: examples
 
 #  - uses: ./.github/actions/hello-world-action
     - name: Optimize Javascript
