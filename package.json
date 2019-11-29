@@ -4,7 +4,7 @@
   "main": "electron.js",
   "repository": "https://github.com/justgook/elm-image",
   "author": "Romans Potasovs",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "private": true,
   "scripts": {
     "posthtml": "posthtml ./examples/gh-pages/index.html -o ./examples/gh-pages/index.html -c posthtml.config.js"

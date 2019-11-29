@@ -17,8 +17,8 @@ jobs:
       with:
         node-version: 12.x
 
-    - name: Set yarn-cache
-      id: yarn-cache
+    - name: Set yarn
+      id: yarn
       run: |
         echo "::set-output name=dir::$(yarn cache dir)"
         echo "::add-path::$(yarn bin)"
@@ -26,7 +26,7 @@ jobs:
       uses: actions/cache@v1.0.3
       id: yarn-cache-exists
       with:
-        path: ${{ steps.yarn-cache.outputs.dir }}
+        path: ${{ steps.yarn.outputs.dir }}
         key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
         restore-keys: |
           ${{ runner.os }}-yarn-
