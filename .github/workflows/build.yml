@@ -52,8 +52,8 @@ jobs:
       run: elm-test
 
     - name: Build
-      run: |
-        elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
+      uses: justgook/setup-elm@v1
+      run: elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
       working-directory: examples
 
 #    - uses: ./.github/actions/hello-world-action
