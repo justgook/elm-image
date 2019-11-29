@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Setup Elm
-      uses: justgook/setup-elm@1.0.0
+      uses: justgook/setup-elm@v1
     - name: Setup Node.js for use with actions
       uses: actions/setup-node@v1.1.0
       with:
