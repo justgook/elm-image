@@ -11,7 +11,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-
+    - uses: justgook/setup-elm@v1
     - name: Setup Node.js for use with actions
       uses: actions/setup-node@v1.1.0
       with:
@@ -52,7 +52,6 @@ jobs:
       run: elm-test
 
     - name: Build
-      uses: justgook/setup-elm@v1
       run: elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
       working-directory: examples
 
