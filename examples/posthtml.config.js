@@ -1,5 +1,5 @@
-const packageJson = require("./package.json");
-const elmJson = require("./elm.json");
+const packageJson = require("../package.json");
+const elmJson = require("../elm.json");
 
 const root = "examples/gh-pages";
 
