@@ -10,57 +10,80 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Setup Elm
-      uses: justgook/setup-elm@v1
-    - name: Setup Node.js for use with actions
-      uses: actions/setup-node@v1.1.0
-      with:
-        node-version: 12.x
+      - uses: actions/checkout@v1
 
-    - name: Set yarn
-      id: yarn
-      run: |
-        echo "::set-output name=dir::$(yarn cache dir)"
-        echo "::add-path::$(yarn bin)"
-    - name: Get Yarn cache
-      uses: actions/cache@v1.0.3
-      id: yarn-cache-exists
-      with:
-        path: ${{ steps.yarn.outputs.dir }}
-        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-yarn-
+      - name: Setup Elm
+        uses: justgook/setup-elm@v1
 
-    - name: Set elm-home
-      id: elm-home
-      run: echo "::set-output name=dir::$(echo $HOME/${{ runner.os }}-elm)"
-    - name: Get Elm cache
-      uses: actions/cache@v1.0.3
-      with:
-        path: ${{ steps.elm-home.outputs.dir }}
-        key: ${{ runner.os }}-elm-${{ hashFiles('**/elm.json') }}
-        restore-keys: |
-          ${{ runner.os }}-elm-
+      - name: Setup Node.js for use with actions
+        uses: actions/setup-node@v1.1.0
+        with:
+          node-version: 12.x
 
-    - name: Install Dependencies
-#      if: steps.yarn-cache-exists.outputs.cache-hit != 'true'
-      run: yarn
+      - name: Set yarn
+        id: yarn
+        run: |
+          echo "::set-output name=dir::$(yarn cache dir)"
+          echo "::add-path::$(yarn bin)"
+          echo "::add-path::$(yarn global bin)"
 
-    - name: Test
-      env:
-        ELM_HOME: ${{ steps.elm-home.outputs.dir }}
-      run: elm-test
+      - name: Get Yarn cache
+        uses: actions/cache@v1.0.3
+        id: yarn-cache-exists
+        with:
+          path: ${{ steps.yarn.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
-    - name: Build
-      run: elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
-      working-directory: examples
+      - name: Get node_modules
+        uses: actions/cache@v1.0.3
+        id: node_modules-cache-exists
+        with:
+          path: ./examples/node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node_modules-
 
-#    - uses: ./.github/actions/hello-world-action
-    - name: Optimize Javascript
-      env:
-        NODE_ENV: production
-      run: |
-        jscodeshift -t transform.js ./examples/gh-pages/bundle.min.js
-        uglifyjs ./examples/gh-pages/bundle.min.js --compress 'pure_funcs="F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=./examples/gh-pages/bundle.min.js
-        posthtml ./examples/gh-pages/index.html -o ./examples/gh-pages/index.html -c posthtml.config.js
+      - name: Install elm-test
+        run: yarn global add elm-test@0.19.1-revision2
+
+      - name: Test
+        env:
+          ELM_HOME: ${{ steps.elm-home.outputs.dir }}
+        run: elm-test
+
+      - name: Install Dependencies
+        run: |
+          yarn
+          echo "::add-path::$(yarn bin)"
+        working-directory: examples
+
+      - name: Build
+        run: elm make src/Main.elm --optimize --output=./gh-pages/bundle.min.js
+        working-directory: examples
+
+      - name: Optimize Javascript
+        env:
+          NODE_ENV: production
+        working-directory: examples
+        run: |
+            jscodeshift -t transform.js ./gh-pages/bundle.min.js
+            uglifyjs ./gh-pages/bundle.min.js --compress "pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9],pure_getters" --output=./gh-pages/bundle.min.js
+            prepack ./gh-pages/bundle.min.js --inlineExpressions --out ./gh-pages/bundle.min.js --maxStackDepth  10000
+            uglifyjs ./gh-pages/bundle.min.js --compress 'keep_fargs=false,unsafe_comps,unsafe' --mangle --output=./gh-pages/bundle.min.js
+
+      - name: Building HTML
+        env:
+          NODE_ENV: production
+          GAME: Elm-Image
+        working-directory: examples
+        run: posthtml ./gh-pages/index.html -o ./gh-pages/index.html -c posthtml.config.js
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@3.0.5
+        with:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          BASE_BRANCH: master
+          BRANCH: gh-pages
+          FOLDER: examples/gh-pages

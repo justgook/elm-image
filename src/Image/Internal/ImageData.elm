@@ -221,7 +221,7 @@ toArray image =
             arr
 
         Array2d _ arr ->
-            Array.foldl Array.append Array.empty arr
+            Array.foldr Array.append Array.empty arr
 
         Bytes _ d b ->
             case D.decode d b of
