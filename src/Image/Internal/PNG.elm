@@ -8,11 +8,12 @@ import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder)
+import Dict
 import Flate exposing (crc32, deflateZlib, inflateZlib)
-import Image.Info as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngInfo)
 import Image.Internal.Array2D as Array2d exposing (Array2D)
 import Image.Internal.Decode as D
 import Image.Internal.ImageData as ImageData exposing (EncodeOptions, Image(..), Order(..), PixelFormat(..), defaultOptions)
+import Image.Internal.Meta as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngHeader)
 
 
 type alias PngEncodeOptions =
@@ -242,7 +243,7 @@ mainDecoder chunksLength =
 
 
 type alias PNG =
-    { header : PngInfo
+    { header : PngHeader
     , data : Pixels
 
     {- There shall not be more than one PLTE chunk. -}
@@ -268,25 +269,17 @@ decodeChunk acc =
                 D.map2
                     (\kindAndData crc ->
                         --                        if crc32 kindAndData == crc then
-                        D.decode
-                            (D.andThen (chunkCollector length acc) (D.unsignedInt32 BE))
-                            kindAndData
+                        D.decode (D.andThen (chunkCollector length acc) (D.unsignedInt32 BE)) kindAndData
                             |> Maybe.map D.succeed
                             |> Maybe.withDefault D.fail
                             -- `length` 4-byte unsigned integer giving the number of bytes in the chunk's data field.
                             -- The length counts only the data field, not itself, the chunk type code, or the CRC.
                             |> D.map (Tuple.pair (length + 12))
-                     --                        else
-                     --                            D.fail
                     )
                     (D.bytes (length + 4))
                     (D.unsignedInt32 BE)
             )
         |> D.andThen identity
-        |> D.andThen
-            (\( length, chunk ) ->
-                D.succeed ( length, chunk )
-            )
 
 
 chunkCollector : Int -> Maybe PNG -> Int -> Decoder (Maybe PNG)
@@ -340,6 +333,7 @@ decodeIHDR =
                 , height = height
                 , color = color
                 , adam7 = adam7
+                , chunks = Dict.empty
                 }
             , data = None
             , palette = Array.empty
@@ -424,20 +418,20 @@ decodeIEND ({ header, palette } as image) length =
                             bytes =
                                 E.encode e
 
-                            total =
-                                Bytes.width bytes
-
-                            decoder =
-                                imageDecoder header palette total
+                            output =
+                                Lazy (Metadata.Png header)
+                                    (\info ->
+                                        D.decode (imageDecoder header palette (Bytes.width bytes)) bytes |> Maybe.withDefault (List info [])
+                                    )
                         in
-                        D.succeed { image | data = ImageData (Bytes (Metadata.Png header) decoder bytes) }
+                        D.succeed { image | data = ImageData output }
 
                     _ ->
                         D.fail
             )
 
 
-imageDecoder : PngInfo -> Palette -> Int -> Decoder Image
+imageDecoder : PngHeader -> Palette -> Int -> Decoder Image
 imageDecoder ({ width, height, color } as header) palette total =
     D.bytes total
         |> D.andThen
@@ -448,7 +442,7 @@ imageDecoder ({ width, height, color } as header) palette total =
             )
 
 
-dataDecode : PngInfo -> Palette -> Decoder Image
+dataDecode : PngHeader -> Palette -> Decoder Image
 dataDecode ({ width, height, color } as header) palette =
     case color of
         IndexedColour BitDepth1_2_4_8__8 ->
@@ -886,22 +880,20 @@ paeth a b c =
         c
 
 
-decodeUnknown : Int -> b -> Int -> Decoder b
-decodeUnknown kind image length =
-    D.bytes length
-        |> D.map
-            (\_ ->
-                let
-                    _ =
-                        ( E.encode (E.unsignedInt32 BE kind)
-                            |> D.decode (D.string 4)
-                        , kind
-                        )
+decodeUnknown : Int -> PNG -> Int -> Decoder PNG
+decodeUnknown kind ({ header } as image) length =
+    D.bytes length |> D.map (saveChunk image kind)
 
-                    --                            |> Debug.log "kind"
-                in
-                image
-            )
+
+saveChunk : PNG -> Int -> Bytes -> PNG
+saveChunk ({ header } as image) kind value =
+    let
+        name =
+            E.encode (E.unsignedInt32 BE kind)
+                |> D.decode (D.string 4)
+                |> Maybe.withDefault ""
+    in
+    { image | header = { header | chunks = Dict.insert name value header.chunks } }
 
 
 decodeIHDRColor : Decoder PngColor

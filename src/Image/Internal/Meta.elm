@@ -1,33 +1,46 @@
-module Image.Info exposing
-    ( Info(..)
-    , PngColor(..), PngInfo, BmpInfo, FromDataInfo
+module Image.Internal.Meta exposing
+    ( BitDepth1_2_4_8(..)
+    , BitDepth1_2_4_8_16(..)
+    , BitDepth8_16(..)
+    , BmpBitsPerPixel(..)
+    , BmpHeader
+    , FromDataBitDepth(..)
+    , FromDataColor(..)
+    , FromDataInfo
+    , GifHeader
+    , Header(..)
+    , PngColor(..)
+    , PngHeader
     , dimensions
-    , BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), BmpBitsPerPixel(..), FromDataBitDepth(..), FromDataColor(..)
     )
 
-{-|
+{-| -}
 
-@docs Info
-@docs PngColor, PngInfo, BmpInfo, FromDataInfo
-
-
-# Helper functions
-
-@docs dimensions
-
-
-# Helper types
-
-@docs BitDepth1_2_4_8, BitDepth1_2_4_8_16, BitDepth8_16, BmpBitsPerPixel, FromDataBitDepth, FromDataColor
-
--}
+import Bytes exposing (Bytes)
+import Dict exposing (Dict)
 
 
 {-| -}
-type Info
-    = Png PngInfo
-    | Bmp BmpInfo
-    | Gif GifInfo
+dimensions : Header -> { width : Int, height : Int }
+dimensions meta =
+    case meta of
+        Png { width, height } ->
+            { width = width, height = height }
+
+        Bmp { width, height } ->
+            { width = width, height = height }
+
+        Gif { width, height } ->
+            { width = width, height = height }
+
+        FromData { width, height } ->
+            { width = width, height = height }
+
+
+type Header
+    = Png PngHeader
+    | Bmp BmpHeader
+    | Gif GifHeader
     | FromData FromDataInfo
 
 
@@ -40,16 +53,17 @@ type alias FromDataInfo =
 
 
 {-| -}
-type alias PngInfo =
+type alias PngHeader =
     { width : Int
     , height : Int
     , color : PngColor
     , adam7 : Bool
+    , chunks : Dict String Bytes
     }
 
 
 {-| -}
-type alias BmpInfo =
+type alias BmpHeader =
     { width : Int
     , height : Int
     , fileSize : Int
@@ -63,7 +77,7 @@ type alias BmpInfo =
 
 
 {-| -}
-type alias GifInfo =
+type alias GifHeader =
     { width : Int
     , height : Int
     }
@@ -124,20 +138,3 @@ type BitDepth1_2_4_8
 type BitDepth8_16
     = BitDepth8_16__8
     | BitDepth8_16__16
-
-
-{-| -}
-dimensions : Info -> { width : Int, height : Int }
-dimensions meta =
-    case meta of
-        Png { width, height } ->
-            { width = width, height = height }
-
-        Bmp { width, height } ->
-            { width = width, height = height }
-
-        Gif { width, height } ->
-            { width = width, height = height }
-
-        FromData { width, height } ->
-            { width = width, height = height }

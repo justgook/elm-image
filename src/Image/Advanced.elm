@@ -1,23 +1,63 @@
 module Image.Advanced exposing
-    ( map, info, eval
+    ( getType, ImageType
+    , map, eval
     , toPng32
     , toBmp24, toBmp32
     )
 
 {-|
 
-@docs map, info, eval
+
+# Image Info
+
+@docs getType, ImageType
+
+
+# Manipulations
+
+@docs map, eval
+
+
+# Custom Encoding
+
 @docs toPng32
 @docs toBmp24, toBmp32
 
 -}
 
 import Bytes exposing (Bytes)
-import Image.Info exposing (BmpInfo, FromDataBitDepth(..), FromDataColor(..), Info(..), PngInfo)
 import Image.Internal.BMP as BMP
 import Image.Internal.ImageData as ImageData exposing (Image, PixelFormat(..))
+import Image.Internal.Meta exposing (BmpHeader, FromDataBitDepth(..), FromDataColor(..), Header(..), PngHeader)
 import Image.Internal.PNG as PNG
 import Image.Internal.Pixel as Pixel
+
+
+{-| Possible image decoded type
+-}
+type ImageType
+    = PNG
+    | BMP
+    | GIF
+    | SCR
+
+
+{-| get image type
+-}
+getType : ImageData.Image -> ImageType
+getType image =
+    case ImageData.getInfo image of
+        Png _ ->
+            PNG
+
+        Bmp _ ->
+            BMP
+
+        Gif _ ->
+            GIF
+
+        FromData _ ->
+            SCR
 
 
 {-| Apply a function on every pixel in an image.
@@ -25,13 +65,6 @@ import Image.Internal.Pixel as Pixel
 map : (Int -> Int) -> Image -> Image
 map =
     ImageData.map
-
-
-{-| Get image info
--}
-info : Image -> Info
-info =
-    ImageData.getInfo
 
 
 {-| When decoding images they are decoded in "lazy way" (real decoding is postponed until data is needed)

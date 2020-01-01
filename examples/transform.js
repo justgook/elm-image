@@ -1,7 +1,9 @@
 /**
  * npm i -g jscodeshift
  * jscodeshift -t transform.js elm.js
+ * https://astexplorer.net/
  */
+// const glslx = require('glslx').compile;
 
 module.exports = function (file, api, options) {
     const j = api.jscodeshift;
@@ -36,9 +38,26 @@ module.exports = function (file, api, options) {
         }
     });
 
+
+    //===============================PREPACK MAGIC Start ===============================
+
+
+    // Add global declarations unknown by prepack
+    tree.find(j.Declaration).at(0).get()
+        .insertBefore(`
+            __assumeDataProperty(global, "requestAnimationFrame", __abstractOrUndefined("function"));
+            __assumeDataProperty(global, "cancelAnimationFrame", __abstractOrUndefined("function"));
+            __assumeDataProperty(global, "document", __abstract({
+                hidden: __abstractOrUndefined("boolean"),
+                mozHidden: __abstractOrUndefined("boolean"),
+                msHidden: __abstractOrUndefined("boolean"),
+                webkitHidden: __abstractOrUndefined("boolean"),
+            }));`);
+    //===============================PREPACK MAGIC End ===============================
+
+
     // Transform the A1..n calls
-    return tree
-        .find(j.CallExpression)
+    tree.find(j.CallExpression)
         .forEach(path => {
             if (
                 path.node.callee.type === "Identifier" &&
@@ -63,6 +82,6 @@ module.exports = function (file, api, options) {
                 };
                 path.node.arguments.shift();
             }
-        })
-        .toSource();
+        });
+    return tree.toSource();
 };

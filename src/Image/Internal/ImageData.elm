@@ -18,33 +18,23 @@ module Image.Internal.ImageData exposing
     )
 
 import Array exposing (Array)
-import Bytes exposing (Bytes, Endianness(..))
-import Bytes.Decode as D exposing (Decoder, Step(..))
-import Image.Info as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Info(..), PngColor(..))
 import Image.Internal.Array2D as Array2D
+import Image.Internal.Meta as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Header(..), PngColor(..))
 
 
 type Image
-    = List Info (List Int)
-    | List2d Info (List (List Int))
-    | Array Info (Array Int)
-    | Array2d Info (Array (Array Int))
-    | Bytes Info (Decoder Image) Bytes
+    = List Header (List Int)
+    | List2d Header (List (List Int))
+    | Array Header (Array Int)
+    | Array2d Header (Array (Array Int))
+    | Lazy Header (Header -> Image)
 
 
 eval : Image -> Image
 eval image =
     case image of
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
-                    image
-
-                Just newData ->
-                    newData
-
-                Nothing ->
-                    image
+        Lazy meta fn ->
+            fn meta
 
         _ ->
             image
@@ -65,19 +55,16 @@ forceColor color image =
         Array2d meta im ->
             Array2d (toFromData color meta) im
 
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
+        Lazy meta fn ->
+            case fn meta of
+                Lazy _ _ ->
                     image
 
-                Just newData ->
+                newData ->
                     forceColor color newData
 
-                Nothing ->
-                    image
 
-
-toFromData : Metadata.FromDataColor -> Info -> Info
+toFromData : Metadata.FromDataColor -> Header -> Header
 toFromData color meta =
     let
         dim =
@@ -136,16 +123,13 @@ map fn image =
         Array2d meta arr ->
             Array2d meta (Array.map (Array.map fn) arr)
 
-        Bytes meta d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
-                    Bytes meta d b
+        Lazy meta fn_ ->
+            case fn_ meta of
+                Lazy _ _ ->
+                    image
 
-                Just newData ->
+                newData ->
                     map fn newData
-
-                Nothing ->
-                    Bytes meta d b
 
 
 toList : Image -> List Int
@@ -163,16 +147,13 @@ toList image =
         Array2d _ arr ->
             Array.foldr (\line acc1 -> Array.foldr (\px acc2 -> px :: acc2) acc1 line) [] arr
 
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
+        Lazy meta fn ->
+            case fn meta of
+                Lazy _ _ ->
                     []
 
-                Just newData ->
+                newData ->
                     toList newData
-
-                Nothing ->
-                    []
 
 
 toList2d : Image -> List (List Int)
@@ -196,16 +177,13 @@ toList2d info =
                 []
                 arr
 
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
+        Lazy meta fn ->
+            case fn meta of
+                Lazy _ _ ->
                     []
 
-                Just newData ->
+                newData ->
                     toList2d newData
-
-                Nothing ->
-                    []
 
 
 toArray : Image -> Array Int
@@ -223,16 +201,13 @@ toArray image =
         Array2d _ arr ->
             Array.foldr Array.append Array.empty arr
 
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
+        Lazy meta fn ->
+            case fn meta of
+                Lazy _ _ ->
                     Array.empty
 
-                Just newData ->
+                newData ->
                     toArray newData
-
-                Nothing ->
-                    Array.empty
 
 
 toArray2d : Image -> Array (Array Int)
@@ -250,16 +225,13 @@ toArray2d image =
         Array2d _ arr ->
             arr
 
-        Bytes _ d b ->
-            case D.decode d b of
-                Just (Bytes _ _ _) ->
+        Lazy meta fn ->
+            case fn meta of
+                Lazy _ _ ->
                     Array.empty
 
-                Just newData ->
+                newData ->
                     toArray2d newData
-
-                Nothing ->
-                    Array.empty
 
 
 fromList w l acc =
@@ -288,12 +260,9 @@ fromArray w arr acc =
         Array.push arr acc
 
 
-getInfo : Image -> Info
+getInfo : Image -> Header
 getInfo image =
     case image of
-        Bytes meta _ _ ->
-            meta
-
         Array2d meta _ ->
             meta
 
@@ -304,6 +273,9 @@ getInfo image =
             meta
 
         List meta _ ->
+            meta
+
+        Lazy meta _ ->
             meta
 
 
@@ -370,7 +342,7 @@ greedyGroupsOfWithStep size step xs =
         []
 
 
-bytesPerPixel : Info -> Int
+bytesPerPixel : Header -> Int
 bytesPerPixel meta =
     case meta of
         Png { color } ->

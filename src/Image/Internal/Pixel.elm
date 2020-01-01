@@ -1,8 +1,8 @@
 module Image.Internal.Pixel exposing (toBit24, toBit32)
 
 import Bitwise
-import Image.Info exposing (BmpBitsPerPixel(..), FromDataBitDepth(..), FromDataColor(..), Info(..), PngColor(..))
 import Image.Internal.ImageData as ImageData exposing (Image)
+import Image.Internal.Meta exposing (BmpBitsPerPixel(..), FromDataBitDepth(..), FromDataColor(..), Header(..), PngColor(..))
 
 
 toBit24 : Image -> Image
@@ -89,13 +89,21 @@ toBit32 image =
                     image
 
                 BmpBitsPerPixel24 ->
-                    addChannel image
+                    addAlphaChannel image
 
                 BmpBitsPerPixel32 ->
                     image
 
         Gif _ ->
             image
+                |> ImageData.map
+                    (\c ->
+                        if c == 0 then
+                            c
+
+                        else
+                            (Bitwise.shiftLeftBy 8 >> (+) 0xFF) c
+                    )
 
         FromData { color } ->
             case color of
@@ -171,6 +179,6 @@ dropChannel =
     ImageData.map (Bitwise.shiftRightZfBy 8)
 
 
-addChannel : Image -> Image
-addChannel =
+addAlphaChannel : Image -> Image
+addAlphaChannel =
     ImageData.map (Bitwise.shiftLeftBy 8 >> (+) 0xFF)

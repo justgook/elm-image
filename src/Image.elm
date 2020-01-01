@@ -48,9 +48,10 @@ import Array exposing (Array)
 import Base64
 import Bytes exposing (Bytes)
 import Image.Advanced
-import Image.Info exposing (FromDataBitDepth(..), FromDataColor(..), Info(..))
 import Image.Internal.BMP as BMP
+import Image.Internal.GIF as GIF
 import Image.Internal.ImageData exposing (Image(..), PixelFormat(..))
+import Image.Internal.Meta exposing (FromDataBitDepth(..), FromDataColor(..), Header(..))
 import Image.Internal.PNG as PNG
 import Maybe exposing (Maybe)
 
@@ -213,7 +214,8 @@ toBmpUrl =
 decode : Bytes -> Maybe Image
 decode bytes =
     PNG.decode bytes
-        |> or (BMP.decode bytes)
+        |> orThenLazy (\_ -> BMP.decode bytes)
+        |> orThenLazy (\_ -> GIF.decode bytes)
 
 
 {-| Get `width` and `height` of [`Image`](#Image)
@@ -223,11 +225,11 @@ dimensions =
     Image.Internal.ImageData.dimensions
 
 
-or : Maybe a -> Maybe a -> Maybe a
-or ma mb =
-    case ma of
+orThenLazy : (() -> Maybe a) -> Maybe a -> Maybe a
+orThenLazy ma mb =
+    case mb of
         Nothing ->
-            mb
+            ma ()
 
         Just _ ->
-            ma
+            mb

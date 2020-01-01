@@ -7,7 +7,8 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Image
 import Image.Advanced
-import Image.Info exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), BmpBitsPerPixel(..), BmpInfo, Info(..), PngColor(..), PngInfo)
+import Image.Internal.ImageData
+import Image.Internal.Meta exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), BmpBitsPerPixel(..), BmpHeader, GifHeader, Header(..), PngColor(..), PngHeader)
 
 
 main =
@@ -39,8 +40,7 @@ pre {
                 , th [] [ text "toBMP32" ]
                 , th [] [ text "toPNG32" ]
                 ]
-
-            --            , rowPng "PNG32 SubFilter" png_rgba0
+            , rowPng "PNG32 SubFilter" png_rgba0
             , rowPng "PNG32 True Color" png_rgba
             , rowPng "PNG32 Indexed" png_indexed
             , rowPng "PNG32 Indexed+" png_indexed2
@@ -94,7 +94,7 @@ row what title input =
 
 
 maybeInfoToString image =
-    Maybe.map Image.Advanced.info image
+    Maybe.map Image.Internal.ImageData.getInfo image
         |> Maybe.map
             (\meta ->
                 case meta of
@@ -105,7 +105,7 @@ maybeInfoToString image =
                         bmpInfo info
 
                     Gif info ->
-                        "Gif"
+                        gifInfo info
 
                     FromData info ->
                         "FromData"
@@ -186,7 +186,7 @@ decodedImage image =
         |> Image.decode
 
 
-pngInfo : PngInfo -> String
+pngInfo : PngHeader -> String
 pngInfo { width, height, color, adam7 } =
     "Png\nwidth: "
         ++ String.fromInt width
@@ -195,12 +195,19 @@ pngInfo { width, height, color, adam7 } =
         ++ ("\nAdam7: " ++ boolToString adam7)
 
 
+gifInfo : GifHeader -> String
+gifInfo { width, height } =
+    "Gif\nwidth: "
+        ++ String.fromInt width
+        ++ ("\nheight: " ++ String.fromInt height)
+
+
 boolToString a =
     if a then
         "True"
 
     else
-        "Falsd"
+        "False"
 
 
 pngColor c =
@@ -221,7 +228,7 @@ pngColor c =
             "TruecolourAlpha " ++ bitDepth8_16ToString a ++ "bit"
 
 
-bmpInfo : BmpInfo -> String
+bmpInfo : BmpHeader -> String
 bmpInfo { width, height, fileSize, pixelStart, dibHeader, color_planes, bitsPerPixel, compression, dataSize } =
     "BMP\nwidth: "
         ++ String.fromInt width
