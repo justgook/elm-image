@@ -72,10 +72,10 @@ module.exports = {
         // "posthtml-content": {
         //     start: (str) => str.replace(/#GAME_URL#/g, `${process.env.GAME}.age.bin`)
         // },
-        "posthtml-style-to-file": {
-            path: `${root}/app.css`,
-            removeStyle: "all",
-        },
+        // "posthtml-style-to-file": {
+        //     path: `${root}/app.css`,
+        //     removeStyle: "all",
+        // },
         "posthtml-head-elements": {
             headElements:
                 {
@@ -106,7 +106,7 @@ module.exports = {
                     // ],
                     "link": [
                         { "rel": "icon", "href": info.favicon },
-                        { "rel": "stylesheet", href: "app.css" }
+                        // { "rel": "stylesheet", href: "app.css" }
                     ],
 
                     "script": [
