@@ -10,7 +10,7 @@ const info = {
     license: elmJson.license,
     twitterName: "@justgook",
     image: "favicon.png",
-    favicon: "examples/gh-pages/favicon.png",
+    favicon: "gh-pages/favicon.png",
     url: "https://justgook.github.io/elm-image/"
 };
 const socialTags_ = ({ facebook, twitter }) =>
