@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - name: Checkout
+        uses: actions/checkout@v2.0.0
 
       - name: Setup Elm
         uses: justgook/setup-elm@v1
@@ -80,7 +81,7 @@ jobs:
         run: posthtml ./gh-pages/index.html -o ./gh-pages/index.html -c posthtml.config.js
 
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@3.0.5
+        uses: JamesIves/github-pages-deploy-action@3.1.1
         with:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           BASE_BRANCH: master
