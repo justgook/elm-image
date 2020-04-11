@@ -40,7 +40,7 @@ toBit24 image =
                     dropChannel image
 
         Gif _ ->
-            image
+            dropChannel image
 
         FromData { color } ->
             case color of
@@ -96,14 +96,6 @@ toBit32 image =
 
         Gif _ ->
             image
-                |> ImageData.map
-                    (\c ->
-                        if c == 0 then
-                            c
-
-                        else
-                            (Bitwise.shiftLeftBy 8 >> (+) 0xFF) c
-                    )
 
         FromData { color } ->
             case color of

@@ -3,7 +3,7 @@ module Image.Internal.GIF exposing (decode, encode)
 import Array exposing (Array)
 import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
-import Bytes.Decode as D
+import Bytes.Decode as D exposing (Decoder)
 import Bytes.Encode as E
 import Image.Internal.Decode as D
 import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..))
@@ -32,7 +32,44 @@ decode bytes =
 
 encode : Image -> Bytes
 encode image =
-    E.encode (E.sequence [])
+    [ encodeSignature
+    , encodeScreenDescriptor image
+    ]
+        |> E.sequence
+        |> E.encode
+
+
+encodeScreenDescriptor : Image -> E.Encoder
+encodeScreenDescriptor image =
+    let
+        { width, height } =
+            ImageData.dimensions image
+
+        packedByte =
+            0x91
+
+        backgroundColorIndex =
+            0x00
+    in
+    E.sequence
+        [ E.unsignedInt16 LE width
+        , E.unsignedInt16 LE height
+        , E.unsignedInt8 packedByte
+        , E.unsignedInt8 backgroundColorIndex
+        , E.unsignedInt8 0x00 -- pixel aspect ratio
+        ]
+
+
+encodeSignature : E.Encoder
+encodeSignature =
+    E.sequence
+        [ E.unsignedInt8 0x47
+        , E.unsignedInt8 0x49
+        , E.unsignedInt8 0x46
+        , E.unsignedInt8 0x38
+        , E.unsignedInt8 0x39
+        , E.unsignedInt8 0x61
+        ]
 
 
 mainDecoder : Int -> D.Decoder Image
@@ -44,22 +81,17 @@ mainDecoder size =
                 D.bytes (size - 13)
                     |> D.map
                         (\rest ->
-                            Lazy
-                                (Gif
-                                    { width = info.width
-                                    , height = info.height
-                                    }
-                                )
+                            Lazy (Gif { width = info.width, height = info.height })
                                 (\header ->
                                     D.decode (decodeLazyImage info) rest
-                                        |> Maybe.withDefault []
-                                        |> ImageData.List header
+                                        |> Maybe.withDefault Array.empty
+                                        |> ImageData.Array header
                                 )
                         )
             )
 
 
-decodeLazyImage : GifInfo -> D.Decoder (List Int)
+decodeLazyImage : GifInfo -> D.Decoder (Array Int)
 decodeLazyImage info =
     decodePalette info.bits
         |> D.map
@@ -73,13 +105,22 @@ decodeLazyImage info =
                 , palette = palette
                 }
             )
-        |> D.andThen (\info_ -> decodeFrames info_ ( [], Array.empty ) |> D.map (\( ext, dsc ) -> ( info_, ext, dsc )))
         |> D.andThen
-            (\( { background, palette }, ext, dsc ) ->
+            (\info_ ->
+                decodeFrames info_ ( ( Nothing, 0, 0 ), Array.empty ) |> D.map (\( ext, dsc ) -> ( info_, ext, dsc ))
+            )
+        |> D.andThen
+            (\( { background, palette }, ( transColor, _, _ ), dsc ) ->
+                let
+                    updatedPalette =
+                        transColor
+                            |> Maybe.map (\c -> Array.set c 0 palette)
+                            |> Maybe.withDefault palette
+                in
                 case Array.get 0 dsc of
                     Just { data } ->
                         data
-                            |> List.map (\i -> Array.get i palette |> Maybe.withDefault 0)
+                            |> Array.map (\i -> Array.get i updatedPalette |> Maybe.withDefault 0)
                             |> D.succeed
 
                     Nothing ->
@@ -102,33 +143,7 @@ decodeSignature =
 
 decodePalette : Int -> D.Decoder (Array Int)
 decodePalette bits =
-    D.array (2 ^ bits) (D.unsignedInt24 BE)
-
-
-decodeExtensionBlocks : D.Decoder { code : Int, body : List Bytes }
-decodeExtensionBlocks =
-    let
-        bodyLoop acc =
-            D.unsignedInt8
-                |> D.andThen
-                    (\count ->
-                        if count > 0 then
-                            D.bytes count
-                                |> D.andThen (\a -> bodyLoop (a :: acc))
-
-                        else
-                            D.succeed acc
-                    )
-    in
-    D.unsignedInt8
-        |> D.andThen
-            (\fnCode ->
-                bodyLoop []
-                    |> D.map
-                        (\ext ->
-                            { code = fnCode, body = ext }
-                        )
-            )
+    D.array (2 ^ bits) (D.unsignedInt24 BE |> D.map (Bitwise.shiftLeftBy 8 >> (+) 0xFF))
 
 
 decodeFrames info (( ext, dsc ) as acc) =
@@ -136,8 +151,34 @@ decodeFrames info (( ext, dsc ) as acc) =
         |> D.andThen
             (\headSymbol ->
                 if headSymbol == 0x21 then
-                    decodeExtensionBlocks
-                        |> D.andThen (\eee -> decodeFrames info ( eee :: ext, dsc ))
+                    -- Extension block starts with 0x21 - followed by type, then size, and other useful information
+                    D.unsignedInt8
+                        |> D.andThen
+                            (\extension ->
+                                case extension of
+                                    0x01 ->
+                                        --Plain Text Extension
+                                        decodeExtensionBlocks
+                                            |> D.andThen (\_ -> decodeFrames info ( ext, dsc ))
+
+                                    0xFF ->
+                                        --Application Extension
+                                        decodeExtensionBlocks
+                                            |> D.andThen (\_ -> decodeFrames info ( ext, dsc ))
+
+                                    0xFE ->
+                                        --Comment Extension
+                                        decodeExtensionBlocks
+                                            |> D.andThen (\_ -> decodeFrames info ( ext, dsc ))
+
+                                    0xF9 ->
+                                        --Graphics Control Extension
+                                        decodeControlExtension
+                                            |> D.andThen (\a -> decodeFrames info ( a, dsc ))
+
+                                    _ ->
+                                        D.fail
+                            )
 
                 else if headSymbol == 0x2C then
                     D.map5
@@ -149,10 +190,7 @@ decodeFrames info (( ext, dsc ) as acc) =
                             , m = Bitwise.shiftRightBy 7 mipx
                             , px = Bitwise.and 7 mipx
                             , i = Bitwise.and 1 <| Bitwise.shiftRightBy 6 mipx
-                            , data = []
-
-                            --, background = info.background
-                            --, palette = info.palette
+                            , data = Array.empty
                             }
                         )
                         (D.unsignedInt16 LE)
@@ -169,7 +207,11 @@ decodeFrames info (( ext, dsc ) as acc) =
                                     D.unsignedInt8
                                     D.unsignedInt8
                                     |> D.andThen identity
-                                    |> D.map (\data -> ( ext, Array.push { dsc_ | data = data } dsc ))
+                                    |> D.map
+                                        (\data ->
+                                            --TODO add decoding for rest frames
+                                            ( ext, Array.push { dsc_ | data = data } dsc )
+                                        )
                             )
 
                 else
@@ -185,6 +227,50 @@ type alias GifInfo =
     , bits : Int
     , background : Int
     }
+
+
+decodeControlExtension : Decoder ( Maybe Int, Int, Int )
+decodeControlExtension =
+    D.map5
+        (\_ packedField delay colorIndex _ ->
+            let
+                transColor =
+                    if Bitwise.and 1 packedField /= 0 then
+                        Just colorIndex
+
+                    else
+                        Nothing
+
+                disposal =
+                    Bitwise.and 28 packedField
+                        |> Bitwise.shiftRightBy 2
+            in
+            ( transColor, delay, disposal )
+        )
+        D.unsignedInt8
+        D.unsignedInt8
+        (D.unsignedInt16 LE)
+        D.unsignedInt8
+        D.unsignedInt8
+
+
+decodeExtensionBlocks : D.Decoder { body : List Bytes }
+decodeExtensionBlocks =
+    let
+        bodyLoop acc =
+            D.unsignedInt8
+                |> D.andThen
+                    (\count ->
+                        if count > 0 then
+                            D.bytes count
+                                |> D.andThen (\a -> bodyLoop (a :: acc))
+
+                        else
+                            D.succeed acc
+                    )
+    in
+    bodyLoop []
+        |> D.map (\ext -> { body = ext })
 
 
 decodeInfo : D.Decoder GifInfo
@@ -214,4 +300,4 @@ decodeInfo =
         (D.unsignedInt16 LE)
         D.unsignedInt8
         D.unsignedInt8
-        |> D.andThen (\info -> D.unsignedInt8 |> D.map (\skip -> info))
+        |> D.andThen (\info -> D.unsignedInt8 |> D.map (\_ -> info))

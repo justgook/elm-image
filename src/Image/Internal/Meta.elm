@@ -18,6 +18,7 @@ module Image.Internal.Meta exposing
 
 import Bytes exposing (Bytes)
 import Dict exposing (Dict)
+import Set exposing (Set)
 
 
 {-| -}
