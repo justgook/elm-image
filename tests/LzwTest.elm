@@ -1,5 +1,6 @@
 module LzwTest exposing (..)
 
+import Array
 import Bytes.Decode as D
 import Bytes.Encode as E
 import Expect
@@ -7,6 +8,7 @@ import Image.Internal.Lzw as Lzw
 import Test exposing (..)
 
 
+suite : Test
 suite =
     describe "Lzw"
         [ test "Encode List" <|
@@ -20,7 +22,7 @@ suite =
         , test "Bytes Decoder" <|
             \_ ->
                 D.decode (Lzw.decoder (2 ^ 2 - 1) (2 + 1) 22) encodedBytes
-                    |> Maybe.map (Expect.equalLists decodedData)
+                    |> Maybe.map (Array.toList >> Expect.equalLists decodedData)
                     |> Maybe.withDefault (Expect.fail "Decode fail")
         ]
 

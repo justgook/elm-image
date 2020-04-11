@@ -18,6 +18,7 @@ module Image.Internal.ImageData exposing
     )
 
 import Array exposing (Array)
+import Dict
 import Image.Internal.Array2D as Array2D
 import Image.Internal.Meta as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Header(..), PngColor(..))
 
@@ -38,6 +39,37 @@ eval image =
 
         _ ->
             image
+
+
+toPalette : Image -> ( Array Int, Array Int )
+toPalette image =
+    image
+        |> toArray
+        |> Array.foldl
+            (\px ( palette, indexes ) ->
+                let
+                    i =
+                        Dict.get px palette
+                in
+                case i of
+                    Just index ->
+                        ( palette, Array.push index indexes )
+
+                    Nothing ->
+                        let
+                            index =
+                                Dict.size palette
+                        in
+                        ( Dict.insert px index palette, Array.push index indexes )
+            )
+            ( Dict.empty, Array.empty )
+        |> Tuple.mapFirst
+            (\p ->
+                p
+                    |> Dict.toList
+                    |> List.sortBy Tuple.second
+                    |> List.foldl (Tuple.first >> Array.push) Array.empty
+            )
 
 
 forceColor : Metadata.FromDataColor -> Image -> Image

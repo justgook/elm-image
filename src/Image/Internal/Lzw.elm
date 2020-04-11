@@ -1,12 +1,13 @@
 module Image.Internal.Lzw exposing (decodeGifList, decoder, encodeGifList)
 
+import Array exposing (Array)
 import Bytes.Decode as D exposing (Step(..))
 import Dict
 import Image.Internal.BitReader as BitReader
 import Image.Internal.BitWriter as BitWriter
 
 
-decoder : Int -> Int -> Int -> D.Decoder (List Int)
+decoder : Int -> Int -> Int -> D.Decoder (Array Int)
 decoder size firstCodeSize count_firstBlock =
     D.bytes count_firstBlock
         |> D.andThen
@@ -33,7 +34,7 @@ decoder size firstCodeSize count_firstBlock =
                                                 acc =
                                                     { eoi = eoi
                                                     , table = table
-                                                    , indexStream = value
+                                                    , indexStream = Array.fromList value
                                                     , indexBuffer = value
                                                     , read = firstCodeSize
                                                     }
@@ -77,7 +78,7 @@ bitDecoder ({ eoi, table, indexStream, read, indexBuffer } as acc) =
                             Loop
                                 { acc
                                     | table = Dict.insert tableKey tableValue table
-                                    , indexStream = indexStream ++ v
+                                    , indexStream = Array.append indexStream (Array.fromList v)
                                     , indexBuffer = v
                                     , read = newRead
                                 }
@@ -102,7 +103,7 @@ bitDecoder ({ eoi, table, indexStream, read, indexBuffer } as acc) =
                             Loop
                                 { acc
                                     | table = Dict.insert code tableValue table
-                                    , indexStream = indexStream ++ tableValue
+                                    , indexStream = Array.append indexStream (Array.fromList tableValue)
                                     , indexBuffer = tableValue
                                     , read = newRead
                                 }
@@ -112,6 +113,7 @@ bitDecoder ({ eoi, table, indexStream, read, indexBuffer } as acc) =
             )
 
 
+decodeGifList : Int -> List Int -> List Int
 decodeGifList size data =
     let
         ( cc, eoi, table ) =
@@ -168,7 +170,11 @@ decodeGifList_ eoi table indexStream codeStream code__1 =
             indexStream
 
 
-initDecodeTable : Int -> ( Int, Int, Dict.Dict Int (List Int) )
+type alias DecodeTable =
+    ( Int, Int, Dict.Dict Int (List Int) )
+
+
+initDecodeTable : Int -> DecodeTable
 initDecodeTable size =
     let
         cc =
@@ -215,6 +221,7 @@ encodeGifList_ eoi table indexStream codeStream indexBuffer =
                 |> List.reverse
 
 
+encodeGifList : Int -> List Int -> List Int
 encodeGifList size data =
     let
         cc =
