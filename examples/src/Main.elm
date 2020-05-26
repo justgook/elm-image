@@ -8,7 +8,7 @@ import Html.Attributes exposing (..)
 import Image
 import Image.Advanced
 import Image.Internal.ImageData
-import Image.Internal.Meta exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), BmpBitsPerPixel(..), BmpHeader, GifHeader, Header(..), PngColor(..), PngHeader)
+import Image.Internal.Meta as Meta exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), BmpBitsPerPixel(..), BmpHeader, GifHeader, Header(..), PngColor(..), PngHeader, PngTextChunk, PngTextCompression(..), PngTextEncoding(..))
 
 
 main =
@@ -43,6 +43,8 @@ pre {
             , rowPng "PNG32 SubFilter" png_rgba0
             , rowPng "PNG32 True Color" png_rgba
             , rowPng "PNG32 Indexed" png_indexed
+            , rowPng "PNG32 Indexed with Latin1 comment" png_comment_latin1
+            , rowPng "PNG32 Indexed with utf8 comment" png_comment_utf8
             , rowPng "PNG32 Indexed+" png_indexed2
             , rowPng "png_grayscale" png_grayscale
 
@@ -136,6 +138,14 @@ png_rgba =
     "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAU1JREFUWIXF1jEOgyAUgOH3SA/QmzA6eISO3dyMl3AzbF7CdHPr6BEcHL1Jb0AnGkvhAQ+rTNWk/l8goAgA0K2lhoyh5Iz1tLCeIaqm1UrOmAPo1lI/bgXrGQIA4EyEMD/OQojtxRkIYd84GvEDOBqBVdN6t8849FkIM6gteqH+WDWtHoceX09g7fHrHbBbS61k4T0nnEtgI653SJ4JEweglyMI4CC2cTN8iChACsIVpxDRgBgEFfchkgAUIibuQiQDXIiUuI0gz4HQMOdEzuucNQN7DjZgHHqsp0XX08I+tpWckQUwcXPNQSg54+sJOhlgxzkIEwdIXAJfPAWxjScBQvEYhB2PBsTGKYQrHgVIjbsQvjhA4HuAG/9GFOT3hHcGcuNbBPUCcwL2iscgfgB7x0OIL8C/4hTiA/h33IcQR8ZdCDQ3jopvx+NW4Bv/Yxx+YWcxGQAAAABJRU5ErkJggg=="
 
 
+png_comment_latin1 =
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAEnRFWHRDb21tZW50AKenIHlvbG8gp6cTBE3dAAABQklEQVRYw8WWvQ2DMBBG7z5lgGzikoIRKNPRIZagQ+6yRESXLiUjUFCySTZwKiQH+d/CXAWWuPeM7fMxEdG41YoyQoqFu3lNyoG2H5QUC+cIjFutpqZKygEioislsD9cJQH95QoJHAdKS8A0WFKC236wHp/365klsYfriN5cH7b9oN6vJ38/lHTG7w/icauVFJW1TsCXpO0HdX8Qp8J9y4GQZLESOty3JxCaNFTCBHdJIOa3+iRccJsEYtfWJhECN0kgZXcfJWLgRwlnHfDFXidyrnPQxYGc2Xfzqrp5TS7bUiyMHLheamMlpFj4+yGFXHiKxA6PXgIbPEZCh0cJ+OAhEkd4sEAo3CVhggcJxMJNEja4tx9Ihf9LVM5+AmfBdQnXBYYz4SESOBvuk0AJuEsCpeA2CZSEmyTY17efGVNT8Q//Yxx+PHcj+gAAAABJRU5ErkJggg=="
+
+
+png_comment_utf8 =
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAHmlUWHRDb21tZW50AAAAAABOb24gTGF0aW4xOiDmvKLlrZfSTb37AAABQklEQVRYw8WWvQ2DMBBG7z5lgGzikoIRKNPRIZagQ+6yRESXLiUjUFCySTZwKiQH+d/CXAWWuPeM7fMxEdG41YoyQoqFu3lNyoG2H5QUC+cIjFutpqZKygEioislsD9cJQH95QoJHAdKS8A0WFKC236wHp/365klsYfriN5cH7b9oN6vJ38/lHTG7w/icauVFJW1TsCXpO0HdX8Qp8J9y4GQZLESOty3JxCaNFTCBHdJIOa3+iRccJsEYtfWJhECN0kgZXcfJWLgRwlnHfDFXidyrnPQxYGc2Xfzqrp5TS7bUiyMHLheamMlpFj4+yGFXHiKxA6PXgIbPEZCh0cJ+OAhEkd4sEAo3CVhggcJxMJNEja4tx9Ihf9LVM5+AmfBdQnXBYYz4SESOBvuk0AJuEsCpeA2CZSEmyTY17efGVNT8Q//Yxx+PHcj+gAAAABJRU5ErkJggg=="
+
+
 png_indexed =
     "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAAXNSR0IArs4c6QAAAA9QTFRFAAAAWmN4f9E78K0AYbXJVRkoWwAAAAV0Uk5TAP////8c0CZSAAAAl0lEQVQ4jZXQWRLEIAgA0TbO/c8cCUHBhdTw268SBK5p+IWhfAjKh2ggFwJS8YBMKEjECwrLTKBQw2Df6CAK+l8G8IKxhwND4Db1wAT+LQGoILw2AhHxJEyg3WO+2J9Atsp+oS/3vbJ0L2TntQ8hr2bTTehVdl2F3pVtF2F33/cmagBL74JTN8Gxv4JzV0HSH0HWRZD2Jm7D/AlwYEde7wAAAABJRU5ErkJggg=="
 
@@ -187,12 +197,35 @@ decodedImage image =
 
 
 pngInfo : PngHeader -> String
-pngInfo { width, height, color, adam7 } =
+pngInfo { width, height, color, adam7, textChunks } =
     "Png\nwidth: "
         ++ String.fromInt width
         ++ ("\nheight: " ++ String.fromInt height)
         ++ ("\ncolor: " ++ pngColor color)
         ++ ("\nAdam7: " ++ boolToString adam7)
+        ++ String.concat (List.map textChunkToString textChunks)
+
+
+textChunkToString : PngTextChunk -> String
+textChunkToString { keyword, text, encoding, compression } =
+    let
+        compressionInfo =
+            case compression of
+                PngTextCompressed ->
+                    "Compressed"
+
+                PngTextUncompressed ->
+                    "Uncompressed"
+
+        encodinginfo =
+            case encoding of
+                PngTextEncodingLatin1 ->
+                    "Latin1"
+
+                PngTextEncodingUtf8 { translatedKeyword, language } ->
+                    "UTF-8,\ntranslated keyword is \"" ++ translatedKeyword ++ "\", language is \"" ++ language ++ "\""
+    in
+    "\n" ++ Meta.textKeywordToString keyword ++ ": \"" ++ text ++ "\" (" ++ compressionInfo ++ ", " ++ encodinginfo ++ ")"
 
 
 gifInfo : GifHeader -> String
