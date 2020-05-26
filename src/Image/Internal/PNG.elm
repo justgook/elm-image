@@ -13,7 +13,7 @@ import Flate exposing (crc32, deflateZlib, inflateZlib)
 import Image.Internal.Array2D as Array2d exposing (Array2D)
 import Image.Internal.Decode as D
 import Image.Internal.ImageData as ImageData exposing (EncodeOptions, Image(..), Order(..), PixelFormat(..), defaultOptions)
-import Image.Internal.Meta as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngHeader)
+import Image.Internal.Meta as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngHeader, PngTextChunk, PngTextCompression(..), PngTextEncoding(..), PngTextKeyword(..))
 
 
 type alias PngEncodeOptions =
@@ -41,6 +41,31 @@ encode imgData =
         chunkIDAT =
             encodeChunk 1229209940 (encodeIDAT opt arr |> E.encode)
 
+        chunkiTXt =
+            case ImageData.getInfo imgData of
+                Metadata.Png { textChunks } ->
+                    E.sequence <|
+                        List.map
+                            (\i ->
+                                let
+                                    type_ =
+                                        case ( i.encoding, i.compression ) of
+                                            ( PngTextEncodingUtf8 _, _ ) ->
+                                                1767135348
+
+                                            ( PngTextEncodingLatin1, PngTextUncompressed ) ->
+                                                1950701684
+
+                                            ( PngTextEncodingLatin1, PngTextCompressed ) ->
+                                                2052348020
+                                in
+                                encodeChunk type_ (encodeTextChunk i |> E.encode)
+                            )
+                            textChunks
+
+                _ ->
+                    E.sequence []
+
         chunkIEND =
             encodeChunk 1229278788 (E.sequence [] |> E.encode)
     in
@@ -48,11 +73,13 @@ encode imgData =
         [ encodeSignature
         , chunkIHDR
         , chunkIDAT
+        , chunkiTXt
         , chunkIEND
         ]
         |> E.encode
 
 
+encodeSignature : Encoder
 encodeSignature =
     E.sequence
         [ E.unsignedInt8 137
@@ -207,6 +234,52 @@ encodeIHDR width height { format } =
         ]
 
 
+encodeTextChunk : PngTextChunk -> Encoder
+encodeTextChunk { keyword, compression, encoding, text } =
+    let
+        encodingInfo =
+            case encoding of
+                PngTextEncodingLatin1 ->
+                    []
+
+                PngTextEncodingUtf8 { language, translatedKeyword } ->
+                    [ E.string language
+                    , E.unsignedInt8 0
+                    , E.string translatedKeyword
+                    , E.unsignedInt8 0
+                    ]
+
+        compressionInfo =
+            case ( encoding, compression ) of
+                ( PngTextEncodingUtf8 _, PngTextUncompressed ) ->
+                    [ 0, 0 ]
+
+                ( PngTextEncodingUtf8 _, PngTextCompressed ) ->
+                    [ 0, 1 ]
+
+                ( PngTextEncodingLatin1, PngTextUncompressed ) ->
+                    []
+
+                ( PngTextEncodingLatin1, PngTextCompressed ) ->
+                    [ 0 ]
+
+        encodedText =
+            case compression of
+                PngTextUncompressed ->
+                    E.string text
+
+                PngTextCompressed ->
+                    E.bytes <| deflateZlib <| E.encode <| E.string text
+    in
+    E.sequence
+        [ E.string <| Metadata.textKeywordToString keyword
+        , E.unsignedInt8 0
+        , E.sequence <| List.map E.unsignedInt8 compressionInfo
+        , E.sequence encodingInfo
+        , encodedText
+        ]
+
+
 {-| DECODE STARTS HERE
 -}
 decode : Bytes -> Maybe Image
@@ -305,6 +378,18 @@ chunkCollector length acc kind =
             decodeIEND image length
                 |> D.map Just
 
+        ( Just image, 1767135348, _ ) ->
+            decodeiTXt image length
+                |> D.map Just
+
+        ( Just image, 1950701684, _ ) ->
+            decodetEXt image length
+                |> D.map Just
+
+        ( Just image, 2052348020, _ ) ->
+            decodezTXt image length
+                |> D.map Just
+
         ( Just image, _, _ ) ->
             decodeUnknown kind image length
                 |> D.map Just
@@ -334,6 +419,7 @@ decodeIHDR =
                 , color = color
                 , adam7 = adam7
                 , chunks = Dict.empty
+                , textChunks = []
                 }
             , data = None
             , palette = Array.empty
@@ -368,6 +454,214 @@ decodePLTE : PNG -> Int -> Decoder PNG
 decodePLTE image length =
     D.array (length // 3) (D.unsignedInt24 BE)
         |> D.map (\palette -> { image | palette = palette })
+
+
+decodeNullTerminatedString : Decoder String
+decodeNullTerminatedString =
+    D.loop []
+        (\acc ->
+            D.unsignedInt8
+                |> D.map
+                    (\b ->
+                        if b == 0 then
+                            D.Done <| List.reverse acc
+
+                        else
+                            D.Loop <| b :: acc
+                    )
+        )
+        |> D.andThen
+            (\bs ->
+                bs
+                    |> List.map E.unsignedInt8
+                    |> E.sequence
+                    |> E.encode
+                    |> D.decode (D.string <| List.length bs)
+                    |> (\res ->
+                            case res of
+                                Nothing ->
+                                    D.fail
+
+                                Just s ->
+                                    D.succeed s
+                       )
+            )
+
+
+textKeywordDecoder : Decoder PngTextKeyword
+textKeywordDecoder =
+    decodeNullTerminatedString
+        |> D.map Metadata.stringToTextKeyword
+
+
+decodeLatin1String : Int -> Decoder String
+decodeLatin1String length =
+    let
+        decodeChar =
+            D.unsignedInt8 |> D.map Char.fromCode
+    in
+    D.listR length decodeChar |> D.map (List.reverse >> String.fromList)
+
+
+decodetEXt : PNG -> Int -> Decoder PNG
+decodetEXt image length =
+    textKeywordDecoder
+        |> D.andThen
+            (\keyword ->
+                D.map
+                    (\text ->
+                        appendTextChunk
+                            { keyword = keyword
+                            , compression = PngTextUncompressed
+                            , encoding = PngTextEncodingLatin1
+                            , text = text
+                            }
+                            image
+                    )
+                    (let
+                        leftover =
+                            length
+                                - {- null byte -} 1
+                                - E.getStringWidth (Metadata.textKeywordToString keyword)
+                     in
+                     decodeLatin1String leftover
+                    )
+            )
+
+
+decodezTXt : PNG -> Int -> Decoder PNG
+decodezTXt image length =
+    let
+        compressionDecoder =
+            D.unsignedInt8
+                |> D.andThen
+                    (\comp ->
+                        case comp of
+                            0 ->
+                                D.succeed PngTextCompressed
+
+                            _ ->
+                                D.fail
+                    )
+    in
+    D.succeed
+        (\keyword _ -> keyword)
+        |> D.andMap textKeywordDecoder
+        |> D.andMap compressionDecoder
+        |> D.andThen
+            (\keyword ->
+                (let
+                    leftover =
+                        length
+                            - {- null byte -} 1
+                            - {- compression method byte -} 1
+                            - E.getStringWidth (Metadata.textKeywordToString keyword)
+                 in
+                 D.bytes leftover
+                    |> D.andThen
+                        (deflateZlib
+                            >> (\bs ->
+                                    D.decode (decodeLatin1String <| Bytes.width bs) bs
+                               )
+                            >> Maybe.map D.succeed
+                            >> Maybe.withDefault D.fail
+                        )
+                )
+                    |> D.map
+                        (\text ->
+                            appendTextChunk
+                                { keyword = keyword
+                                , compression = PngTextCompressed
+                                , encoding = PngTextEncodingLatin1
+                                , text = text
+                                }
+                                image
+                        )
+            )
+
+
+decodeiTXt : PNG -> Int -> Decoder PNG
+decodeiTXt image length =
+    let
+        compressionDecoder =
+            D.map2
+                (\comp kind ->
+                    case comp of
+                        0 ->
+                            D.succeed PngTextUncompressed
+
+                        1 ->
+                            if kind == 0 then
+                                D.succeed PngTextCompressed
+
+                            else
+                                D.fail
+
+                        _ ->
+                            D.fail
+                )
+                D.unsignedInt8
+                D.unsignedInt8
+                |> D.andThen identity
+    in
+    D.succeed
+        (\keyword compression language translatedKeyword ->
+            { keyword = keyword
+            , compression = compression
+            , language = language
+            , translatedKeyword = translatedKeyword
+            }
+        )
+        |> D.andMap textKeywordDecoder
+        |> D.andMap compressionDecoder
+        |> D.andMap decodeNullTerminatedString
+        |> D.andMap decodeNullTerminatedString
+        |> D.andThen
+            (\{ keyword, compression, language, translatedKeyword } ->
+                (let
+                    leftover =
+                        length
+                            - {- null bytes -} 3
+                            - {- compression bytes -} 2
+                            - E.getStringWidth (Metadata.textKeywordToString keyword)
+                            - E.getStringWidth language
+                            - E.getStringWidth translatedKeyword
+                 in
+                 case compression of
+                    PngTextUncompressed ->
+                        D.string leftover
+
+                    PngTextCompressed ->
+                        D.bytes leftover
+                            |> D.andThen
+                                (deflateZlib
+                                    >> (\bs ->
+                                            D.decode (D.string <| Bytes.width bs) bs
+                                       )
+                                    >> Maybe.map D.succeed
+                                    >> Maybe.withDefault D.fail
+                                )
+                )
+                    |> D.map
+                        (\text ->
+                            appendTextChunk
+                                { keyword = keyword
+                                , compression = compression
+                                , encoding =
+                                    PngTextEncodingUtf8
+                                        { language = language
+                                        , translatedKeyword = translatedKeyword
+                                        }
+                                , text = text
+                                }
+                                image
+                        )
+            )
+
+
+appendTextChunk : PngTextChunk -> PNG -> PNG
+appendTextChunk chunk ({ header } as image) =
+    { image | header = { header | textChunks = header.textChunks ++ [ chunk ] } }
 
 
 decode_tRNS : PNG -> Int -> Decoder PNG
