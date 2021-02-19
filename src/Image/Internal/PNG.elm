@@ -110,15 +110,21 @@ encodeIDAT { order } arr =
                         packed =
                             encodePixel32 px prev
                     in
-                    ( px, E.sequence [ acc2, packed ] )
+                    ( px, packed :: acc2 )
                 )
-                ( 0, scanLineFilter )
+                ( 0, [ scanLineFilter ] )
                 sArr
-                |> (\( _, line ) -> E.sequence [ acc, line ])
+                |> (\( _, line ) -> line :: acc)
         )
-        (E.sequence [])
+        []
         arr
-        |> (E.encode >> deflateZlib >> E.bytes)
+        |> (List.reverse
+                >> List.concatMap List.reverse
+                >> E.sequence
+                >> E.encode
+                >> deflateZlib
+                >> E.bytes
+           )
 
 
 encodePixel32 : Int -> Int -> Encoder
