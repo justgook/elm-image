@@ -10,10 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2.3.4
 
       - name: Setup Elm
-        uses: justgook/setup-elm@v1
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+        uses: justgook/setup-elm@1.2.0
 
       - name: Setup Node.js for use with actions
         uses: actions/setup-node@v1.1.0
@@ -22,6 +24,8 @@ jobs:
 
       - name: Set yarn
         id: yarn
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
         run: |
           echo "::set-output name=dir::$(yarn cache dir)"
           echo "::add-path::$(yarn bin)"
