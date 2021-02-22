@@ -18,9 +18,9 @@ jobs:
         uses: justgook/setup-elm@1.2.0
 
       - name: Setup Node.js for use with actions
-        uses: actions/setup-node@v1.1.0
+        uses: actions/setup-node@v2.1.4
         with:
-          node-version: 12.x
+          node-version: 14
 
       - name: Set yarn
         id: yarn
@@ -32,7 +32,7 @@ jobs:
           echo "::add-path::$(yarn global bin)"
 
       - name: Get Yarn cache
-        uses: actions/cache@v1.0.3
+        uses: actions/cache@v2.1.4
         id: yarn-cache-exists
         with:
           path: ${{ steps.yarn.outputs.dir }}
@@ -41,7 +41,7 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Get node_modules
-        uses: actions/cache@v1.0.3
+        uses: actions/cache@v2.1.4
         id: node_modules-cache-exists
         with:
           path: ./examples/node_modules
@@ -50,7 +50,7 @@ jobs:
             ${{ runner.os }}-node_modules-
 
       - name: Install elm-test
-        run: yarn global add elm-test@0.19.1-revision2
+        run: yarn global add elm-test@0.19.1-revision6
 
       - name: Test
         env:
@@ -84,9 +84,9 @@ jobs:
         run: posthtml ./gh-pages/index.html -o ./gh-pages/index.html -c posthtml.config.js
 
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@3.1.1
+        uses: peaceiris/actions-gh-pages@v3.7.3
         with:
-          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-          BASE_BRANCH: master
-          BRANCH: gh-pages
-          FOLDER: examples/gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: examples/gh-pages
+          publish_branch: gh-pages
+
