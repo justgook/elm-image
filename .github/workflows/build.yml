@@ -58,6 +58,8 @@ jobs:
         run: elm-test
 
       - name: Install Dependencies
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
         run: |
           yarn
           echo "::add-path::$(yarn bin)"
