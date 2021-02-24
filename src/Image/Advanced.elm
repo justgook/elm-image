@@ -1,9 +1,9 @@
 module Image.Advanced exposing
     ( getType, ImageType
-    , map, get, put, eval
+    , map, get, put, eval, mirror
     , toPng32
     , toBmp24, toBmp32
-    , toGif
+    , toGIF89a
     )
 
 {-|
@@ -16,21 +16,21 @@ module Image.Advanced exposing
 
 # Manipulations
 
-@docs map, get, put, eval
+@docs map, get, put, eval, mirror
 
 
 # Custom Encoding
 
 @docs toPng32
 @docs toBmp24, toBmp32
-@docs toGif
+@docs toGIF89a
 
 -}
 
 import Bytes exposing (Bytes)
 import Image.Internal.BMP as BMP
 import Image.Internal.GIF as GIF
-import Image.Internal.ImageData as ImageData exposing (Image, PixelFormat(..))
+import Image.Internal.ImageData as ImageData exposing (Image(..), PixelFormat(..))
 import Image.Internal.Meta exposing (BmpHeader, FromDataBitDepth(..), FromDataColor(..), Header(..), PngHeader)
 import Image.Internal.PNG as PNG
 import Image.Internal.Pixel as Pixel
@@ -94,7 +94,11 @@ eval =
 -}
 get : Int -> Int -> Int -> Int -> Image -> Image
 get sx sy sw sh image =
-    Debug.log "IMPLEMENT ME" image
+    image
+
+
+
+--|> Debug.log "IMPLEMENT ME"
 
 
 {-| Paints data from the given `Image` onto the other `Image`.
@@ -109,7 +113,50 @@ get sx sy sw sh image =
 -}
 put : Int -> Int -> Image -> Image -> Image
 put sx sy from to =
-    Debug.log "IMPLEMENT ME" to
+    to
+
+
+
+--|> Debug.log "IMPLEMENT ME"
+
+
+{-| -}
+mirror : Bool -> Bool -> Image -> Image
+mirror horizontally vertically image =
+    case ( image, horizontally, vertically ) of
+        ( List2d meta list2d, True, True ) ->
+            List.foldl (\l acc -> List.reverse l :: acc) [] list2d
+                |> List2d meta
+
+        ( List2d meta list2d, True, False ) ->
+            List.map (\l -> List.reverse l) list2d
+                |> List2d meta
+
+        ( List2d meta list2d, False, True ) ->
+            List.reverse list2d
+                |> List2d meta
+
+        ( _, False, False ) ->
+            image
+
+        ( im, _, _ ) ->
+            -- TODO Make rest flips more effective
+            List2d (ImageData.getInfo im) (ImageData.toList2d im)
+                |> mirror horizontally vertically
+
+
+
+{-
+   use it as
+       Flip True True (Crop 10 10 100 100 (Image Image))
+
+-}
+
+
+type Filter
+    = Flip Bool Bool Filter
+    | Crop Int Int Int Int Filter
+    | Image Image
 
 
 {-| Encode image into True color with alpha PNG image
@@ -148,8 +195,8 @@ toBmp32 =
 2.  Gif supports only fully transparent color, all colors that isn't fully transparent (alpha > 0) will be flatted to it color
 
 -}
-toGif : Image -> Bytes
-toGif =
+toGIF89a : Image -> Bytes
+toGIF89a =
     Pixel.toBit32
         >> ImageData.forceColor (FromDataChannel4 FromDataBitDepth8)
         >> GIF.encode

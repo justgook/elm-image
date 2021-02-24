@@ -1,9 +1,14 @@
-module Image.Internal.Decode exposing (andMap, array, foldl, listR, unsignedInt24)
+module Image.Internal.Decode exposing (andMap, andThen2, array, foldl, listR, unsignedInt24)
 
 import Array exposing (Array)
 import Bitwise
 import Bytes exposing (Endianness)
 import Bytes.Decode as D exposing (Decoder, Step(..))
+
+
+andThen2 : (a -> b -> Decoder c) -> Decoder a -> Decoder b -> Decoder c
+andThen2 fn d1 d2 =
+    D.andThen (\a -> D.andThen (fn a) d2) d1
 
 
 andMap : Decoder a -> Decoder (a -> b) -> Decoder b

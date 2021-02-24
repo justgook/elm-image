@@ -14,10 +14,12 @@ module Image.Internal.ImageData exposing
     , toArray2d
     , toList
     , toList2d
+    , toPalette
     , width
     )
 
 import Array exposing (Array)
+import Bitwise
 import Dict
 import Image.Internal.Array2D as Array2D
 import Image.Internal.Meta as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Header(..), PngColor(..))

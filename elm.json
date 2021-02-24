@@ -7,7 +7,6 @@
     "exposed-modules": [
         "Image",
         "Image.Color",
-        "Image.Magic",
         "Image.Advanced"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",

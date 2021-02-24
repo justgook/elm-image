@@ -88,24 +88,22 @@ pre {
                 , th [] [ text "toPNG32" ]
                 , th [] [ text "toGIF" ]
                 ]
-
-            --, rowPng "PNG32 SubFilter" png_rgba0
-            --, rowPng "PNG32 True Color" png_rgba
-            --, rowPng "PNG32 Indexed" png_indexed
-            --, rowPng "PNG32 Indexed+" png_indexed2
-            --, rowPng "png_grayscale" png_grayscale
-            --, rowBmp "BMP32" bmp32
-            --, rowBmp "BMP24" bmp24
-            --, rowBmp "BMP8 indexed" bmp8_indexed
-            --, rowBmp "bmp_grayscale" bmp_grayscale
-            --, rowGif "GIF" gif
-            --, rowGif "GIF Animated" gif_animated
-            --, rowGif "GIF Transparent 0" gif_transparent0
-            --, rowGif "GIF Transparent 1" gif_transparent1
+            , rowPng "PNG32 SubFilter" png_rgba0
+            , rowPng "PNG32 True Color" png_rgba
+            , rowPng "PNG32 Indexed" png_indexed
+            , rowPng "PNG32 Indexed+" png_indexed2
+            , rowPng "png_grayscale" png_grayscale
+            , rowBmp "BMP32" bmp32
+            , rowBmp "BMP24" bmp24
+            , rowBmp "BMP8 indexed" bmp8_indexed
+            , rowBmp "bmp_grayscale" bmp_grayscale
+            , rowGif "GIF" gif
+            , rowGif "GIF Animated" gif_animated
+            , rowGif "GIF Transparent 0" gif_transparent0
+            , rowGif "GIF Transparent 1" gif_transparent1
             , rowGif "GIF Transparent 2" gif_transparent2
-
-            --, rowCsv "CSV" model.width model.csv
-            --, rowJpg "jpg" jpg
+            , rowCsv "CSV" model.width model.csv
+            , rowJpg "jpg" jpg
             ]
         , GitHubCorner.topRight "https://github.com/justgook/elm-image"
         ]
@@ -208,7 +206,7 @@ png32MaybeEncode =
 
 
 gifMaybeEncode =
-    Maybe.andThen (Image.Advanced.toGif >> Base64.fromBytes)
+    Maybe.andThen (Image.Advanced.toGIF89a >> Base64.fromBytes)
         >> Maybe.withDefault ""
 
 

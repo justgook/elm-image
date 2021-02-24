@@ -1,7 +1,7 @@
 module Image exposing
     ( Image
     , decode
-    , toPng, toBmp, toPngUrl, toBmpUrl
+    , toPng, toBmp, toGif, toPngUrl, toBmpUrl, toGifUrl
     , fromList, fromList2d, fromArray, fromArray2d
     , toList, toList2d, toArray, toArray2d
     , dimensions
@@ -20,7 +20,7 @@ module Image exposing
 
 # Encoding
 
-@docs toPng, toBmp, toPngUrl, toBmpUrl
+@docs toPng, toBmp, toGif, toPngUrl, toBmpUrl, toGifUrl
 
 
 # Construct
@@ -194,6 +194,23 @@ toBmp =
 toBmpUrl : Image -> String
 toBmpUrl =
     Image.Advanced.toBmp24 >> Base64.fromBytes >> Maybe.withDefault "" >> (++) "data:image/bmp;base64,"
+
+
+{-| The Graphics Interchange Format (GIF)
+
+Palette based image with support of animation (not implemented), Transparency (totally transparent color - use 0x00)
+
+-}
+toGif : Image -> Bytes
+toGif =
+    Image.Advanced.toGIF89a
+
+
+{-| Create base64-url that can be used directly as img source (`img [ src <| toPngUrl myImage ]`)
+-}
+toGifUrl : Image -> String
+toGifUrl =
+    Image.Advanced.toGIF89a >> Base64.fromBytes >> Maybe.withDefault "" >> (++) "data:image/gif;base64,"
 
 
 {-| Convert blob of image (`png` or `bmp`) into [`Image`](#Image)

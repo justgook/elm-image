@@ -6,6 +6,7 @@ import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder)
 import Bytes.Encode as E
 import Image.Internal.Decode as D
+import Image.Internal.Encode as E
 import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..))
 import Image.Internal.Lzw as Lzw
 import Image.Internal.Meta exposing (Header(..))
@@ -32,44 +33,93 @@ decode bytes =
 
 encode : Image -> Bytes
 encode image =
+    let
+        { width, height } =
+            ImageData.dimensions image
+
+        ( colorArray, imageDataRaw ) =
+            ImageData.toPalette image
+
+        ( paletteColors, transparentColorIndex ) =
+            colorArray
+                |> indexedFoldl
+                    (\backgroundIndex color ( encoded, transColor ) ->
+                        ( E.unsignedInt24 BE (Bitwise.shiftRightZfBy 8 color) :: encoded
+                        , if color == 0 then
+                            --Set transparent index if it is fully transparent
+                            Just backgroundIndex
+
+                          else
+                            transColor
+                        )
+                    )
+                    ( [], Nothing )
+                |> Tuple.mapFirst List.reverse
+
+        colorCount =
+            Array.length colorArray
+
+        globalTableSize =
+            calcGlobalTableSize colorCount
+
+        totalColorCount =
+            2 ^ (globalTableSize + 1)
+
+        globalColorTable =
+            E.sequence
+                [ E.sequence paletteColors
+
+                -- Fill missing space with black
+                , E.sequence (List.repeat (totalColorCount - colorCount) (E.unsignedInt24 BE 0))
+                ]
+
+        imageDescriptor =
+            E.sequence
+                [ E.unsignedInt8 0x2C
+                , E.unsignedInt32 LE 0x00 -- Frame offset Top/left
+                , E.unsignedInt16 LE width -- Frame Width
+                , E.unsignedInt16 LE height -- Frame Height
+                , E.unsignedInt8 0x00 -- LOCAL options (color table flag, interlace flag, sort flag, _, size of local color table)
+                ]
+
+        graphicsControlExtensionFlags =
+            case transparentColorIndex of
+                Just _ ->
+                    0x01
+
+                Nothing ->
+                    0x00
+
+        graphicsControlExtension =
+            [ E.unsignedInt8 0x21 -- Extension Introducer (Always 0x21)
+            , E.unsignedInt8 0xF9 -- Graphics Control Label (Always 0xF9)
+            , E.unsignedInt8 0x04 -- Byte Size
+            , E.unsignedInt8 graphicsControlExtensionFlags -- Packed Field (Bits: 000 - Reserved, 000 - Disposal Method, 0 - user input flag, 1 - transparent color flag)
+            , E.unsignedInt16 BE 0x00 -- Delay Time
+            , E.unsignedInt8 (Maybe.withDefault 0x00 transparentColorIndex) -- Transparent Color Index
+            , E.unsignedInt8 0x00 -- Block Terminator (Always 0x00)
+            ]
+                |> E.sequence
+    in
     [ encodeSignature
-    , encodeScreenDescriptor image
+    , encodeScreenDescriptor
+        { globalTableSize = globalTableSize
+        , backgroundColorIndex = 0x00
+        , width = width
+        , height = height
+        }
+    , globalColorTable
+    , graphicsControlExtension
+    , imageDescriptor
+    , imageDataRaw |> Array.toList |> Lzw.encode (totalColorCount - 1)
+    , E.unsignedInt8 0x3B -- trailer
     ]
         |> E.sequence
         |> E.encode
 
 
-encodeScreenDescriptor : Image -> E.Encoder
-encodeScreenDescriptor image =
-    let
-        { width, height } =
-            ImageData.dimensions image
 
-        packedByte =
-            0x91
-
-        backgroundColorIndex =
-            0x00
-    in
-    E.sequence
-        [ E.unsignedInt16 LE width
-        , E.unsignedInt16 LE height
-        , E.unsignedInt8 packedByte
-        , E.unsignedInt8 backgroundColorIndex
-        , E.unsignedInt8 0x00 -- pixel aspect ratio
-        ]
-
-
-encodeSignature : E.Encoder
-encodeSignature =
-    E.sequence
-        [ E.unsignedInt8 0x47
-        , E.unsignedInt8 0x49
-        , E.unsignedInt8 0x46
-        , E.unsignedInt8 0x38
-        , E.unsignedInt8 0x39
-        , E.unsignedInt8 0x61
-        ]
+--- Decoder Helper
 
 
 mainDecoder : Int -> D.Decoder Image
@@ -143,7 +193,7 @@ decodeSignature =
 
 decodePalette : Int -> D.Decoder (Array Int)
 decodePalette bits =
-    D.array (2 ^ bits) (D.unsignedInt24 BE |> D.map (Bitwise.shiftLeftBy 8 >> (+) 0xFF))
+    D.array (2 ^ bits) (D.unsignedInt24 BE |> D.map (Bitwise.shiftLeftBy 8 >> (+) 0xFF >> Bitwise.shiftRightZfBy 0))
 
 
 decodeFrames info (( ext, dsc ) as acc) =
@@ -200,16 +250,10 @@ decodeFrames info (( ext, dsc ) as acc) =
                         D.unsignedInt8
                         |> D.andThen
                             (\dsc_ ->
-                                D.map2
-                                    (\firstCodeSize count_firstBlock ->
-                                        Lzw.decoder (2 ^ info.bits - 1) (firstCodeSize + 1) count_firstBlock
-                                    )
-                                    D.unsignedInt8
-                                    D.unsignedInt8
-                                    |> D.andThen identity
+                                Lzw.decoder (2 ^ info.bits - 1)
                                     |> D.map
                                         (\data ->
-                                            --TODO add decoding for rest frames
+                                            --TODO add decoding for rest frames and images bigger than 256
                                             ( ext, Array.push { dsc_ | data = data } dsc )
                                         )
                             )
@@ -301,3 +345,88 @@ decodeInfo =
         D.unsignedInt8
         D.unsignedInt8
         |> D.andThen (\info -> D.unsignedInt8 |> D.map (\_ -> info))
+
+
+
+------ Encode Helpers
+
+
+calcGlobalTableSize : number -> number
+calcGlobalTableSize i =
+    if i > 128 then
+        7
+
+    else if i > 64 then
+        6
+
+    else if i > 32 then
+        5
+
+    else if i > 16 then
+        4
+
+    else if i > 8 then
+        3
+
+    else if i > 4 then
+        2
+
+    else if i > 2 then
+        1
+
+    else
+        --if i > 0 then
+        0
+
+
+packedByte_ =
+    { globalTableFlag = 0x80
+    , colorResolution = 0x10
+    , sortFlag = 0
+    }
+
+
+encodeScreenDescriptor :
+    { globalTableSize : Int
+    , backgroundColorIndex : Int
+    , width : Int
+    , height : Int
+    }
+    -> E.Encoder
+encodeScreenDescriptor opt =
+    let
+        packedByte =
+            packedByte_.globalTableFlag
+                |> Bitwise.or packedByte_.colorResolution
+                |> Bitwise.or packedByte_.sortFlag
+                |> Bitwise.or opt.globalTableSize
+    in
+    E.sequence
+        [ E.unsignedInt16 LE opt.width
+        , E.unsignedInt16 LE opt.height
+        , E.unsignedInt8 packedByte
+        , E.unsignedInt8 opt.backgroundColorIndex -- color index to use as transparent
+        , E.unsignedInt8 0x00 -- pixel aspect ratio
+        ]
+
+
+encodeSignature : E.Encoder
+encodeSignature =
+    E.sequence
+        [ E.unsignedInt8 0x47
+        , E.unsignedInt8 0x49
+        , E.unsignedInt8 0x46
+        , E.unsignedInt8 0x38
+        , E.unsignedInt8 0x39
+        , E.unsignedInt8 0x61
+        ]
+
+
+indexedFoldl : (Int -> a -> acc -> acc) -> acc -> Array a -> acc
+indexedFoldl func acc list =
+    Tuple.second (Array.foldl (indexedFoldlStep func) ( 0, acc ) list)
+
+
+indexedFoldlStep : (Int -> b -> a -> c) -> b -> ( Int, a ) -> ( Int, c )
+indexedFoldlStep fn x ( i, thisAcc ) =
+    ( i + 1, fn i x thisAcc )

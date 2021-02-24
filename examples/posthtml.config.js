@@ -1,7 +1,7 @@
 const packageJson = require("../package.json");
 const elmJson = require("../elm.json");
 
-const root = "examples/gh-pages";
+const root = "gh-pages";
 
 const info = {
     title: "Elm Image encoding and decoding",
