@@ -1,5 +1,5 @@
 module Image.Advanced exposing
-    ( getType, ImageType
+    ( getType, ImageType(..)
     , map, get, put, eval, mirror
     , toPng32
     , toBmp24, toBmp32
@@ -27,6 +27,7 @@ module Image.Advanced exposing
 
 -}
 
+import Array exposing (Array)
 import Bytes exposing (Bytes)
 import Image.Internal.BMP as BMP
 import Image.Internal.GIF as GIF
@@ -124,39 +125,28 @@ put sx sy from to =
 mirror : Bool -> Bool -> Image -> Image
 mirror horizontally vertically image =
     case ( image, horizontally, vertically ) of
-        ( List2d meta list2d, True, True ) ->
-            List.foldl (\l acc -> List.reverse l :: acc) [] list2d
-                |> List2d meta
+        ( ImageEval meta data, True, True ) ->
+            Array.foldr (\l acc -> Array.push (arrayReverse l) acc) Array.empty data
+                |> ImageEval meta
 
-        ( List2d meta list2d, True, False ) ->
-            List.map (\l -> List.reverse l) list2d
-                |> List2d meta
+        ( ImageEval meta data, True, False ) ->
+            Array.map arrayReverse data
+                |> ImageEval meta
 
-        ( List2d meta list2d, False, True ) ->
-            List.reverse list2d
-                |> List2d meta
+        ( ImageEval meta data, False, True ) ->
+            arrayReverse data
+                |> ImageEval meta
 
         ( _, False, False ) ->
             image
 
-        ( im, _, _ ) ->
-            -- TODO Make rest flips more effective
-            List2d (ImageData.getInfo im) (ImageData.toList2d im)
-                |> mirror horizontally vertically
+        ( Lazy meta fn, _, _ ) ->
+            mirror horizontally vertically (fn meta)
 
 
-
-{-
-   use it as
-       Flip True True (Crop 10 10 100 100 (Image Image))
-
--}
-
-
-type Filter
-    = Flip Bool Bool Filter
-    | Crop Int Int Int Int Filter
-    | Image Image
+arrayReverse : Array a -> Array a
+arrayReverse =
+    Array.foldr (\a acc -> Array.push a acc) Array.empty
 
 
 {-| Encode image into True color with alpha PNG image

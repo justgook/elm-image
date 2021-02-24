@@ -5,6 +5,7 @@ import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder)
 import Bytes.Encode as E
+import Image.Internal.Array2D as Array2D
 import Image.Internal.Decode as D
 import Image.Internal.Encode as E
 import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..))
@@ -134,8 +135,9 @@ mainDecoder size =
                             Lazy (Gif { width = info.width, height = info.height })
                                 (\header ->
                                     D.decode (decodeLazyImage info) rest
+                                        |> Maybe.map (\arr -> Array2D.fromArray info.width arr)
                                         |> Maybe.withDefault Array.empty
-                                        |> ImageData.Array header
+                                        |> ImageData.ImageEval header
                                 )
                         )
             )

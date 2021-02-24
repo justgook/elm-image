@@ -48,6 +48,7 @@ import Array exposing (Array)
 import Base64
 import Bytes exposing (Bytes)
 import Image.Advanced
+import Image.Internal.Array2D as Array2D
 import Image.Internal.BMP as BMP
 import Image.Internal.GIF as GIF
 import Image.Internal.ImageData exposing (Image(..), PixelFormat(..))
@@ -82,49 +83,49 @@ type alias Image =
 -}
 fromList : Width -> List Pixel -> Image
 fromList w l =
-    List
+    ImageEval
         (FromData
             { width = w
             , height = List.length l // w
             , color = FromDataChannel4 FromDataBitDepth8
             }
         )
-        l
+        (Array2D.fromList w l)
 
 
 {-| Create [`Image`](#Image) of `List (List Int)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
 fromList2d : List (List Pixel) -> Image
 fromList2d l =
-    List2d
+    ImageEval
         (FromData
             { width = l |> List.head |> Maybe.map List.length |> Maybe.withDefault 0
             , height = List.length l
             , color = FromDataChannel4 FromDataBitDepth8
             }
         )
-        l
+        (Array2D.fromList2D l)
 
 
 {-| Create [`Image`](#Image) of `Array Int` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
 fromArray : Width -> Array Pixel -> Image
 fromArray w arr =
-    Array
+    ImageEval
         (FromData
             { width = w
             , height = Array.length arr // w
             , color = FromDataChannel4 FromDataBitDepth8
             }
         )
-        arr
+        (Array2D.fromArray w arr)
 
 
 {-| Create [`Image`](#Image) of `Array (Array Pixel)` where each `Pixel` is `Int` as `0xRRGGBBAA`
 -}
 fromArray2d : Array (Array Pixel) -> Image
 fromArray2d arr =
-    Array2d
+    ImageEval
         (FromData
             { width = arr |> Array.get 0 |> Maybe.map Array.length |> Maybe.withDefault 0
             , height = Array.length arr
@@ -206,7 +207,7 @@ toGif =
     Image.Advanced.toGIF89a
 
 
-{-| Create base64-url that can be used directly as img source (`img [ src <| toPngUrl myImage ]`)
+{-| Create base64-url that can be used directly as img source (`img [ src <| toGifUrl myImage ]`)
 -}
 toGifUrl : Image -> String
 toGifUrl =

@@ -1,5 +1,6 @@
 module Image.Internal.BMP exposing (decode, encode)
 
+import Array
 import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder, Step(..))
@@ -22,7 +23,14 @@ decoder bytes =
             (\bm ->
                 if bm == "BM" then
                     decodeInfo
-                        |> D.map (\bmInfo -> Lazy (MetaData.Bmp bmInfo) (\info -> D.decode (imageDecoder bmInfo) bytes |> Maybe.withDefault (List info [])))
+                        |> D.map
+                            (\bmInfo ->
+                                Lazy (MetaData.Bmp bmInfo)
+                                    (\info ->
+                                        D.decode (imageDecoder bmInfo) bytes
+                                            |> Maybe.withDefault (ImageEval info Array.empty)
+                                    )
+                            )
 
                 else
                     D.fail
@@ -403,26 +411,26 @@ staticHeaderPart =
 decode32 : BmpHeader -> Decoder Image
 decode32 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt32 LE) |> D.map List.reverse))
-        |> D.map (List2d (MetaData.Bmp info))
+        |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt32 LE)))
+        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
 
 
 decode24 : BmpHeader -> Decoder Image
 decode24 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt24 LE) |> D.map List.reverse))
-        |> D.map (List2d (MetaData.Bmp info))
+        |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt24 LE)))
+        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
 
 
 decode16 : BmpHeader -> Decoder Image
 decode16 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width (D.unsignedInt16 LE) |> D.map List.reverse))
-        |> D.map (List2d (MetaData.Bmp info))
+        |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt16 LE)))
+        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
 
 
 decode8 : BmpHeader -> Decoder Image
 decode8 info =
     D.bytes info.pixelStart
-        |> D.andThen (\_ -> D.listR info.height (D.listR info.width D.unsignedInt8 |> D.map List.reverse))
-        |> D.map (List2d (MetaData.Bmp info))
+        |> D.andThen (\_ -> D.listR info.height (D.array info.width D.unsignedInt8))
+        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))

@@ -21,15 +21,12 @@ module Image.Internal.ImageData exposing
 import Array exposing (Array)
 import Bitwise
 import Dict
-import Image.Internal.Array2D as Array2D
+import Image.Internal.Array2D as Array2D exposing (Array2D)
 import Image.Internal.Meta as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Header(..), PngColor(..))
 
 
 type Image
-    = List Header (List Int)
-    | List2d Header (List (List Int))
-    | Array Header (Array Int)
-    | Array2d Header (Array (Array Int))
+    = ImageEval Header (Array2D Int)
     | Lazy Header (Header -> Image)
 
 
@@ -77,17 +74,8 @@ toPalette image =
 forceColor : Metadata.FromDataColor -> Image -> Image
 forceColor color image =
     case image of
-        List meta im ->
-            List (toFromData color meta) im
-
-        List2d meta im ->
-            List2d (toFromData color meta) im
-
-        Array meta im ->
-            Array (toFromData color meta) im
-
-        Array2d meta im ->
-            Array2d (toFromData color meta) im
+        ImageEval meta im ->
+            ImageEval (toFromData color meta) im
 
         Lazy meta fn ->
             case fn meta of
@@ -145,17 +133,8 @@ defaultOptions =
 map : (Int -> Int) -> Image -> Image
 map fn image =
     case image of
-        List meta l ->
-            List meta (List.map fn l)
-
-        List2d meta l ->
-            List2d meta (List.map (List.map fn) l)
-
-        Array meta arr ->
-            Array meta (Array.map fn arr)
-
-        Array2d meta arr ->
-            Array2d meta (Array.map (Array.map fn) arr)
+        ImageEval meta arr ->
+            ImageEval meta (Array.map (Array.map fn) arr)
 
         Lazy meta fn_ ->
             case fn_ meta of
@@ -169,16 +148,7 @@ map fn image =
 toList : Image -> List Int
 toList image =
     case image of
-        List _ l ->
-            l
-
-        List2d _ l ->
-            List.concat l
-
-        Array _ arr ->
-            Array.toList arr
-
-        Array2d _ arr ->
+        ImageEval _ arr ->
             Array.foldr (\line acc1 -> Array.foldr (\px acc2 -> px :: acc2) acc1 line) [] arr
 
         Lazy meta fn ->
@@ -193,16 +163,7 @@ toList image =
 toList2d : Image -> List (List Int)
 toList2d info =
     case info of
-        List meta l ->
-            greedyGroupsOf (Metadata.dimensions meta).width l
-
-        List2d _ l ->
-            l
-
-        Array meta arr ->
-            Array.toList arr |> greedyGroupsOf (Metadata.dimensions meta).width
-
-        Array2d _ arr ->
+        ImageEval _ arr ->
             Array.foldr
                 (\line acc1 ->
                     Array.foldr (\px acc2 -> px :: acc2) [] line
@@ -223,16 +184,7 @@ toList2d info =
 toArray : Image -> Array Int
 toArray image =
     case image of
-        List _ l ->
-            Array.fromList l
-
-        List2d _ l ->
-            List.foldl (Array.fromList >> (\a b -> Array.append b a)) Array.empty l
-
-        Array _ arr ->
-            arr
-
-        Array2d _ arr ->
+        ImageEval _ arr ->
             Array.foldr Array.append Array.empty arr
 
         Lazy meta fn ->
@@ -247,16 +199,7 @@ toArray image =
 toArray2d : Image -> Array (Array Int)
 toArray2d image =
     case image of
-        List meta l ->
-            fromList (Metadata.dimensions meta).width l (Array.fromList [ Array.empty ])
-
-        List2d _ l ->
-            List.foldl (Array.fromList >> Array.push) Array.empty l
-
-        Array meta arr ->
-            fromArray (Metadata.dimensions meta).width arr Array.empty
-
-        Array2d _ arr ->
+        ImageEval _ arr ->
             arr
 
         Lazy meta fn ->
@@ -268,45 +211,10 @@ toArray2d image =
                     toArray2d newData
 
 
-fromList w l acc =
-    case l of
-        a :: rest ->
-            let
-                newAcc =
-                    applyIf (Array2D.lastLength acc >= w) (Array.push Array.empty) acc
-            in
-            fromList w rest (Array2D.push a newAcc)
-
-        [] ->
-            acc
-
-
-fromArray : Int -> Array a -> Array (Array a) -> Array (Array a)
-fromArray w arr acc =
-    if Array.length arr > w then
-        let
-            ( a1, a2 ) =
-                splitAt w arr
-        in
-        fromArray w a2 (Array.push a1 acc)
-
-    else
-        Array.push arr acc
-
-
 getInfo : Image -> Header
 getInfo image =
     case image of
-        Array2d meta _ ->
-            meta
-
-        List2d meta _ ->
-            meta
-
-        Array meta _ ->
-            meta
-
-        List meta _ ->
+        ImageEval meta _ ->
             meta
 
         Lazy meta _ ->
@@ -321,59 +229,6 @@ dimensions image =
 width : Image -> Int
 width image =
     (dimensions image).width
-
-
-applyIf : Bool -> (a -> a) -> a -> a
-applyIf bool f a =
-    if bool then
-        f a
-
-    else
-        a
-
-
-splitAt : Int -> Array a -> ( Array a, Array a )
-splitAt index xs =
-    let
-        len =
-            Array.length xs
-    in
-    case ( index > 0, index < len ) of
-        ( True, True ) ->
-            ( Array.slice 0 index xs, Array.slice index len xs )
-
-        ( True, False ) ->
-            ( xs, Array.empty )
-
-        ( False, True ) ->
-            ( Array.empty, xs )
-
-        ( False, False ) ->
-            ( Array.empty, Array.empty )
-
-
-greedyGroupsOf : Int -> List a -> List (List a)
-greedyGroupsOf size xs =
-    greedyGroupsOfWithStep size size xs
-
-
-greedyGroupsOfWithStep : Int -> Int -> List a -> List (List a)
-greedyGroupsOfWithStep size step xs =
-    let
-        xs_ =
-            List.drop step xs
-
-        okayArgs =
-            size > 0 && step > 0
-
-        okayXs =
-            List.length xs > 0
-    in
-    if okayArgs && okayXs then
-        List.take size xs :: greedyGroupsOfWithStep size step xs_
-
-    else
-        []
 
 
 bytesPerPixel : Header -> Int

@@ -427,7 +427,8 @@ decodeIEND ({ header, palette } as image) length =
                             output =
                                 Lazy (Metadata.Png header)
                                     (\info ->
-                                        D.decode (imageDecoder header palette (Bytes.width bytes)) bytes |> Maybe.withDefault (List info [])
+                                        D.decode (imageDecoder header palette (Bytes.width bytes)) bytes
+                                            |> Maybe.withDefault (ImageEval info Array.empty)
                                     )
                         in
                         D.succeed { image | data = ImageData output }
@@ -453,15 +454,15 @@ dataDecode ({ width, height, color } as header) palette =
     case color of
         IndexedColour BitDepth1_2_4_8__8 ->
             dataWrapDecode (indexPixel8Decode palette) width height
-                |> D.map (Array2d (Metadata.Png header))
+                |> D.map (ImageEval (Metadata.Png header))
 
         GreyscaleAlpha BitDepth8_16__8 ->
             dataWrapDecode pixel16Decode width height
-                |> D.map (Array2d (Metadata.Png header))
+                |> D.map (ImageEval (Metadata.Png header))
 
         TrueColourAlpha BitDepth8_16__8 ->
             dataWrapDecode pixel32Decode width height
-                |> D.map (Array2d (Metadata.Png header))
+                |> D.map (ImageEval (Metadata.Png header))
 
         _ ->
             D.fail
