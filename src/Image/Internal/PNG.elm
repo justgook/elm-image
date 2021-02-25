@@ -10,7 +10,7 @@ import Bytes.Decode as D exposing (Decoder, Step(..))
 import Bytes.Encode as E exposing (Encoder)
 import Dict
 import Flate exposing (crc32, deflateZlib, inflateZlib)
-import Image.Internal.Array2D as Array2d exposing (Array2D)
+import Image.Internal.Array2d as Array2d exposing (Array2d)
 import Image.Internal.Decode as D
 import Image.Internal.ImageData as ImageData exposing (EncodeOptions, Image(..), Order(..), PixelFormat(..), defaultOptions)
 import Image.Internal.Meta as Metadata exposing (BitDepth1_2_4_8(..), BitDepth1_2_4_8_16(..), BitDepth8_16(..), PngColor(..), PngHeader)
@@ -428,7 +428,7 @@ decodeIEND ({ header, palette } as image) length =
                                 Lazy (Metadata.Png header)
                                     (\info ->
                                         D.decode (imageDecoder header palette (Bytes.width bytes)) bytes
-                                            |> Maybe.withDefault (ImageEval info Array.empty)
+                                            |> Maybe.withDefault (ImageRaw info Array.empty)
                                     )
                         in
                         D.succeed { image | data = ImageData output }
@@ -454,31 +454,31 @@ dataDecode ({ width, height, color } as header) palette =
     case color of
         IndexedColour BitDepth1_2_4_8__8 ->
             dataWrapDecode (indexPixel8Decode palette) width height
-                |> D.map (ImageEval (Metadata.Png header))
+                |> D.map (ImageRaw (Metadata.Png header))
 
         GreyscaleAlpha BitDepth8_16__8 ->
             dataWrapDecode pixel16Decode width height
-                |> D.map (ImageEval (Metadata.Png header))
+                |> D.map (ImageRaw (Metadata.Png header))
 
         TrueColourAlpha BitDepth8_16__8 ->
             dataWrapDecode pixel32Decode width height
-                |> D.map (ImageEval (Metadata.Png header))
+                |> D.map (ImageRaw (Metadata.Png header))
 
         _ ->
             D.fail
 
 
-dataWrapDecode : (Int -> Array2D a -> Decoder (Array2D a)) -> Int -> Int -> Decoder (Array2D a)
+dataWrapDecode : (Int -> Array2d a -> Decoder (Array2d a)) -> Int -> Int -> Decoder (Array2d a)
 dataWrapDecode pxDecode width height =
     D.foldl height (decodeLine pxDecode width) Array.empty
 
 
-decodeLine : (Int -> Array2D a -> Decoder (Array2D a)) -> Int -> Array2D a -> Decoder (Array2D a)
+decodeLine : (Int -> Array2d a -> Decoder (Array2d a)) -> Int -> Array2d a -> Decoder (Array2d a)
 decodeLine pxDecode width acc =
     D.unsignedInt8 |> D.andThen (\filterType -> D.foldl width (pxDecode filterType) (Array.push Array.empty acc))
 
 
-indexPixel8Decode : Palette -> Int -> Array2D Int -> Decoder (Array2D Int)
+indexPixel8Decode : Palette -> Int -> Array2d Int -> Decoder (Array2d Int)
 indexPixel8Decode palette filterType acc =
     pixel8DecodePlain filterType acc
         |> D.andThen
@@ -489,14 +489,7 @@ indexPixel8Decode palette filterType acc =
             )
 
 
-
---pixel8Decode : Int -> Array2D Int -> Decoder (Array2D Int)
---pixel8Decode filterType acc =
---    pixel8DecodePlain filterType acc
---        |> D.map (\a -> Array2d.push a acc)
-
-
-pixel8DecodePlain : Int -> Array2D Int -> Decoder Int
+pixel8DecodePlain : Int -> Array2d Int -> Decoder Int
 pixel8DecodePlain filterType acc =
     case filterType of
         0 ->
@@ -515,7 +508,7 @@ pixel8DecodePlain filterType acc =
             pixelDecode8None_
 
 
-pixel16Decode : Int -> Array2D Int -> Decoder (Array2D Int)
+pixel16Decode : Int -> Array2d Int -> Decoder (Array2d Int)
 pixel16Decode filterType acc =
     (case filterType of
         0 ->
@@ -536,7 +529,7 @@ pixel16Decode filterType acc =
         |> D.map (\a -> Array2d.push a acc)
 
 
-pixel32Decode : Int -> Array2D Int -> Decoder (Array2D Int)
+pixel32Decode : Int -> Array2d Int -> Decoder (Array2d Int)
 pixel32Decode filterType acc =
     (case filterType of
         0 ->
@@ -839,7 +832,7 @@ pixelDecode32Paeth_ acc =
         D.unsignedInt8
 
 
-arrayUp : Array2D a -> Maybe a
+arrayUp : Array2d a -> Maybe a
 arrayUp arr =
     Array.get (Array.length arr - 2) arr
         |> Maybe.andThen (Array.get (Array2d.lastLength arr))

@@ -5,12 +5,13 @@ import Bitwise
 import Bytes exposing (Bytes, Endianness(..))
 import Bytes.Decode as D exposing (Decoder)
 import Bytes.Encode as E
-import Image.Internal.Array2D as Array2D
+import Image.Internal.Array2d as Array2d
 import Image.Internal.Decode as D
 import Image.Internal.Encode as E
 import Image.Internal.ImageData as ImageData exposing (Image(..), Order(..), PixelFormat(..))
 import Image.Internal.Lzw as Lzw
 import Image.Internal.Meta exposing (Header(..))
+import Image.Internal.Util as Util
 
 
 
@@ -43,7 +44,7 @@ encode image =
 
         ( paletteColors, transparentColorIndex ) =
             colorArray
-                |> indexedFoldl
+                |> Util.indexedFoldl
                     (\backgroundIndex color ( encoded, transColor ) ->
                         ( E.unsignedInt24 BE (Bitwise.shiftRightZfBy 8 color) :: encoded
                         , if color == 0 then
@@ -135,9 +136,9 @@ mainDecoder size =
                             Lazy (Gif { width = info.width, height = info.height })
                                 (\header ->
                                     D.decode (decodeLazyImage info) rest
-                                        |> Maybe.map (\arr -> Array2D.fromArray info.width arr)
+                                        |> Maybe.map (\arr -> Array2d.fromArray info.width arr)
                                         |> Maybe.withDefault Array.empty
-                                        |> ImageData.ImageEval header
+                                        |> ImageData.ImageRaw header
                                 )
                         )
             )
@@ -422,13 +423,3 @@ encodeSignature =
         , E.unsignedInt8 0x39
         , E.unsignedInt8 0x61
         ]
-
-
-indexedFoldl : (Int -> a -> acc -> acc) -> acc -> Array a -> acc
-indexedFoldl func acc list =
-    Tuple.second (Array.foldl (indexedFoldlStep func) ( 0, acc ) list)
-
-
-indexedFoldlStep : (Int -> b -> a -> c) -> b -> ( Int, a ) -> ( Int, c )
-indexedFoldlStep fn x ( i, thisAcc ) =
-    ( i + 1, fn i x thisAcc )

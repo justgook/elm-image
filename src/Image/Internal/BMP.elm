@@ -28,7 +28,7 @@ decoder bytes =
                                 Lazy (MetaData.Bmp bmInfo)
                                     (\info ->
                                         D.decode (imageDecoder bmInfo) bytes
-                                            |> Maybe.withDefault (ImageEval info Array.empty)
+                                            |> Maybe.withDefault (ImageRaw info Array.empty)
                                     )
                             )
 
@@ -412,25 +412,25 @@ decode32 : BmpHeader -> Decoder Image
 decode32 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt32 LE)))
-        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
+        |> D.map (Array.fromList >> ImageRaw (MetaData.Bmp info))
 
 
 decode24 : BmpHeader -> Decoder Image
 decode24 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt24 LE)))
-        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
+        |> D.map (Array.fromList >> ImageRaw (MetaData.Bmp info))
 
 
 decode16 : BmpHeader -> Decoder Image
 decode16 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.array info.width (D.unsignedInt16 LE)))
-        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
+        |> D.map (Array.fromList >> ImageRaw (MetaData.Bmp info))
 
 
 decode8 : BmpHeader -> Decoder Image
 decode8 info =
     D.bytes info.pixelStart
         |> D.andThen (\_ -> D.listR info.height (D.array info.width D.unsignedInt8))
-        |> D.map (Array.fromList >> ImageEval (MetaData.Bmp info))
+        |> D.map (Array.fromList >> ImageRaw (MetaData.Bmp info))

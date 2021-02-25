@@ -87,6 +87,7 @@ pre {
                 , th [] [ text "toBMP32" ]
                 , th [] [ text "toPNG32" ]
                 , th [] [ text "toGIF" ]
+                , th [] [ text "part" ]
                 ]
             , rowPng "PNG32 SubFilter" png_rgba0
             , rowPng "PNG32 True Color" png_rgba
@@ -109,22 +110,27 @@ pre {
         ]
 
 
+rowBmp : String -> String -> Html msg
 rowBmp =
     row "bmp"
 
 
+rowPng : String -> String -> Html msg
 rowPng =
     row "png"
 
 
+rowGif : String -> String -> Html msg
 rowGif =
     row "gif"
 
 
+rowJpg : String -> String -> Html msg
 rowJpg =
     row "jpg"
 
 
+rowCsv : String -> Image.Width -> String -> Html msg
 rowCsv title width data =
     let
         image =
@@ -144,6 +150,7 @@ rowCsv title width data =
         image
 
 
+row : String -> String -> String -> Html msg
 row what title input =
     let
         image =
@@ -156,6 +163,7 @@ row what title input =
     row_ title first image
 
 
+row_ : String -> Html msg -> Maybe Image.Internal.ImageData.Image -> Html msg
 row_ title first image =
     tr []
         [ td []
@@ -167,9 +175,11 @@ row_ title first image =
         , td [] [ img [ style "image-rendering" "pixelated", width 32, src <| "data:image/bmp;base64," ++ bmp32MaybeEncode image ] [] ]
         , td [] [ img [ style "image-rendering" "pixelated", width 32, src <| "data:image/png;base64," ++ png32MaybeEncode image ] [] ]
         , td [] [ img [ style "image-rendering" "pixelated", width 32, src <| "data:image/gif;base64," ++ gifMaybeEncode image ] [] ]
+        , td [] [ img [ style "image-rendering" "pixelated", width 16, src <| "data:image/gif;base64," ++ partMaybeEncode image ] [] ]
         ]
 
 
+maybeInfoToString : Maybe Image.Internal.ImageData.Image -> String
 maybeInfoToString image =
     Maybe.map Image.Internal.ImageData.getInfo image
         |> Maybe.map
@@ -190,24 +200,43 @@ maybeInfoToString image =
         |> Maybe.withDefault "UNKNOWN"
 
 
+bmp24MaybeEncode : Maybe Image.Internal.ImageData.Image -> String
 bmp24MaybeEncode =
     Maybe.andThen (Image.Advanced.toBmp24 >> Base64.fromBytes)
         >> Maybe.withDefault ""
 
 
+bmp32MaybeEncode : Maybe Image.Internal.ImageData.Image -> String
 bmp32MaybeEncode =
     Maybe.andThen (Image.Advanced.toBmp32 >> Base64.fromBytes)
         >> Maybe.withDefault ""
 
 
+png32MaybeEncode : Maybe Image.Internal.ImageData.Image -> String
 png32MaybeEncode =
     Maybe.andThen (Image.Advanced.toPng32 >> Base64.fromBytes)
         >> Maybe.withDefault ""
 
 
+gifMaybeEncode : Maybe Image.Internal.ImageData.Image -> String
 gifMaybeEncode =
     Maybe.andThen (Image.Advanced.toGIF89a >> Base64.fromBytes)
         >> Maybe.withDefault ""
+
+
+partMaybeEncode : Maybe Image.Internal.ImageData.Image -> String
+partMaybeEncode =
+    Maybe.andThen (Image.Advanced.get 8 8 16 16 >> Image.Advanced.toPng32 >> Base64.fromBytes)
+        >> Maybe.withDefault ""
+
+
+
+--Maybe.andThen
+--    (\image ->
+--        Image.Advanced.put 0 0 (Image.Advanced.get 8 8 16 16 image) image
+--            |> Image.Advanced.toPng32
+--            |> Base64.fromBytes
+--    )
 
 
 png_rgba0 =

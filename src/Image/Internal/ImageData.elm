@@ -19,14 +19,13 @@ module Image.Internal.ImageData exposing
     )
 
 import Array exposing (Array)
-import Bitwise
 import Dict
-import Image.Internal.Array2D as Array2D exposing (Array2D)
+import Image.Internal.Array2d exposing (Array2d)
 import Image.Internal.Meta as Metadata exposing (BmpBitsPerPixel(..), FromDataColor(..), Header(..), PngColor(..))
 
 
 type Image
-    = ImageEval Header (Array2D Int)
+    = ImageRaw Header (Array2d Int)
     | Lazy Header (Header -> Image)
 
 
@@ -74,8 +73,12 @@ toPalette image =
 forceColor : Metadata.FromDataColor -> Image -> Image
 forceColor color image =
     case image of
-        ImageEval meta im ->
-            ImageEval (toFromData color meta) im
+        ImageRaw meta im ->
+            let
+                dim =
+                    Metadata.dimensions meta
+            in
+            ImageRaw (FromData { width = dim.width, height = dim.height, color = color }) im
 
         Lazy meta fn ->
             case fn meta of
@@ -84,19 +87,6 @@ forceColor color image =
 
                 newData ->
                     forceColor color newData
-
-
-toFromData : Metadata.FromDataColor -> Header -> Header
-toFromData color meta =
-    let
-        dim =
-            Metadata.dimensions meta
-    in
-    FromData
-        { width = dim.width
-        , height = dim.height
-        , color = color
-        }
 
 
 type alias EncodeOptions =
@@ -133,8 +123,8 @@ defaultOptions =
 map : (Int -> Int) -> Image -> Image
 map fn image =
     case image of
-        ImageEval meta arr ->
-            ImageEval meta (Array.map (Array.map fn) arr)
+        ImageRaw meta arr ->
+            ImageRaw meta (Array.map (Array.map fn) arr)
 
         Lazy meta fn_ ->
             case fn_ meta of
@@ -148,7 +138,7 @@ map fn image =
 toList : Image -> List Int
 toList image =
     case image of
-        ImageEval _ arr ->
+        ImageRaw _ arr ->
             Array.foldr (\line acc1 -> Array.foldr (\px acc2 -> px :: acc2) acc1 line) [] arr
 
         Lazy meta fn ->
@@ -163,7 +153,7 @@ toList image =
 toList2d : Image -> List (List Int)
 toList2d info =
     case info of
-        ImageEval _ arr ->
+        ImageRaw _ arr ->
             Array.foldr
                 (\line acc1 ->
                     Array.foldr (\px acc2 -> px :: acc2) [] line
@@ -184,7 +174,7 @@ toList2d info =
 toArray : Image -> Array Int
 toArray image =
     case image of
-        ImageEval _ arr ->
+        ImageRaw _ arr ->
             Array.foldr Array.append Array.empty arr
 
         Lazy meta fn ->
@@ -199,7 +189,7 @@ toArray image =
 toArray2d : Image -> Array (Array Int)
 toArray2d image =
     case image of
-        ImageEval _ arr ->
+        ImageRaw _ arr ->
             arr
 
         Lazy meta fn ->
@@ -214,7 +204,7 @@ toArray2d image =
 getInfo : Image -> Header
 getInfo image =
     case image of
-        ImageEval meta _ ->
+        ImageRaw meta _ ->
             meta
 
         Lazy meta _ ->

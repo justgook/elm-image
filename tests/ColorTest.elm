@@ -58,7 +58,7 @@ suite =
             \_ ->
                 Image.Color.fromArray 1 (Array.fromList colorList)
                     |> Expect.equal (Image.fromArray 1 (Array.fromList intList))
-         , test "Array2D to Image" <|
+         , test "Array2d to Image" <|
             \_ ->
                 Image.Color.fromArray2d (Array.fromList [ Array.fromList colorList ])
                     |> Expect.equal (Image.fromArray2d (Array.fromList [ Array.fromList intList ]))

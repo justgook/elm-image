@@ -1,5 +1,5 @@
 module Image.Advanced exposing
-    ( getType, ImageType(..)
+    ( source, Source(..)
     , map, get, put, eval, mirror
     , toPng32
     , toBmp24, toBmp32
@@ -11,7 +11,7 @@ module Image.Advanced exposing
 
 # Image Info
 
-@docs getType, ImageType
+@docs source, Source
 
 
 # Manipulations
@@ -29,39 +29,40 @@ module Image.Advanced exposing
 
 import Array exposing (Array)
 import Bytes exposing (Bytes)
+import Image.Internal.Array2d as Array2d
 import Image.Internal.BMP as BMP
 import Image.Internal.GIF as GIF
 import Image.Internal.ImageData as ImageData exposing (Image(..), PixelFormat(..))
-import Image.Internal.Meta exposing (BmpHeader, FromDataBitDepth(..), FromDataColor(..), Header(..), PngHeader)
+import Image.Internal.Meta as Meta exposing (BmpHeader, FromDataBitDepth(..), FromDataColor(..), PngHeader)
 import Image.Internal.PNG as PNG
-import Image.Internal.Pixel as Pixel
+import Image.Internal.Pixel as Pixel exposing (toBit32)
 
 
 {-| Possible image decoded type
 -}
-type ImageType
-    = PNG
-    | BMP
-    | GIF
-    | SCR
+type Source
+    = Png
+    | Bmp
+    | Gif
+    | Code
 
 
 {-| Get image type
 -}
-getType : ImageData.Image -> ImageType
-getType image =
+source : ImageData.Image -> Source
+source image =
     case ImageData.getInfo image of
-        Png _ ->
-            PNG
+        Meta.Png _ ->
+            Png
 
-        Bmp _ ->
-            BMP
+        Meta.Bmp _ ->
+            Bmp
 
-        Gif _ ->
-            GIF
+        Meta.Gif _ ->
+            Gif
 
-        FromData _ ->
-            SCR
+        Meta.FromData _ ->
+            Code
 
 
 {-| Apply a function on every pixel in an image.
@@ -95,17 +96,30 @@ eval =
 -}
 get : Int -> Int -> Int -> Int -> Image -> Image
 get sx sy sw sh image =
-    image
+    case toBit32 image of
+        ImageRaw header array2d ->
+            ImageRaw
+                (Meta.FromData
+                    { width = sw
+                    , height = sh
+                    , color = Meta.FromDataChannel4 Meta.FromDataBitDepth8
+                    }
+                )
+                (Array2d.part sx sy sw sh array2d)
 
+        Lazy _ _ ->
+            case eval image of
+                ImageRaw header array2d ->
+                    get sx sy sw sh (ImageRaw header array2d)
 
-
---|> Debug.log "IMPLEMENT ME"
+                Lazy _ _ ->
+                    image
 
 
 {-| Paints data from the given `Image` onto the other `Image`.
 
     newImage =
-        Image.put dx dy imageData image
+        Image.put dx dy imageFrom imageTo
 
   - `imageData` An `Image` containing the array of pixel values.
   - `dx` Horizontal position (x coordinate) at which to place the image data in the destination `Image`.
@@ -113,29 +127,46 @@ get sx sy sw sh image =
 
 -}
 put : Int -> Int -> Image -> Image -> Image
-put sx sy from to =
-    to
+put dx dy from to =
+    case ( toBit32 from, toBit32 to ) of
+        ( ImageRaw _ dataFrom, ImageRaw headerTo dataTo ) ->
+            let
+                dim =
+                    Meta.dimensions headerTo
+            in
+            ImageRaw
+                (Meta.FromData
+                    { width = dim.width
+                    , height = dim.height
+                    , color = Meta.FromDataChannel4 Meta.FromDataBitDepth8
+                    }
+                )
+                (Array2d.apply dx dy dataFrom dataTo)
+
+        _ ->
+            to
 
 
+{-| Mirror image horizontally or/and vertically
 
---|> Debug.log "IMPLEMENT ME"
+    newImage =
+        Image.mirror x y image
 
-
-{-| -}
+-}
 mirror : Bool -> Bool -> Image -> Image
 mirror horizontally vertically image =
     case ( image, horizontally, vertically ) of
-        ( ImageEval meta data, True, True ) ->
+        ( ImageRaw meta data, True, True ) ->
             Array.foldr (\l acc -> Array.push (arrayReverse l) acc) Array.empty data
-                |> ImageEval meta
+                |> ImageRaw meta
 
-        ( ImageEval meta data, True, False ) ->
+        ( ImageRaw meta data, True, False ) ->
             Array.map arrayReverse data
-                |> ImageEval meta
+                |> ImageRaw meta
 
-        ( ImageEval meta data, False, True ) ->
+        ( ImageRaw meta data, False, True ) ->
             arrayReverse data
-                |> ImageEval meta
+                |> ImageRaw meta
 
         ( _, False, False ) ->
             image
