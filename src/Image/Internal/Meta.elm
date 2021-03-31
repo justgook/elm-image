@@ -11,7 +11,13 @@ module Image.Internal.Meta exposing
     , Header(..)
     , PngColor(..)
     , PngHeader
+    , PngTextChunk
+    , PngTextCompression(..)
+    , PngTextKeyword(..)
+    , PngTextEncoding(..)
     , dimensions
+    , stringToTextKeyword
+    , textKeywordToString
     )
 
 {-| -}
@@ -60,7 +66,124 @@ type alias PngHeader =
     , color : PngColor
     , adam7 : Bool
     , chunks : Dict String Bytes
+    , textChunks : List PngTextChunk
     }
+
+
+type alias PngTextChunk =
+    { keyword : PngTextKeyword
+    , compression : PngTextCompression
+    , encoding : PngTextEncoding
+    , text : String
+    }
+
+
+type PngTextCompression
+    = PngTextUncompressed
+    | PngTextCompressed
+
+
+type PngTextEncoding
+    = PngTextEncodingLatin1
+    | PngTextEncodingUtf8
+        { language : String
+        , translatedKeyword : String
+        }
+
+
+type PngTextKeyword
+    = TitleKeyword
+    | AuthorKeyword
+    | DescriptionKeyword
+    | CopyrightKeyword
+    | CreationTimeKeyword
+    | SoftwareKeyword
+    | DisclaimerKeyword
+    | WarningKeyword
+    | SourceKeyword
+    | CommentKeyword
+    | XMPKeyword
+    | OtherKeyword String
+
+
+textKeywordToString : PngTextKeyword -> String
+textKeywordToString keyword =
+    case keyword of
+        TitleKeyword ->
+            "Title"
+
+        AuthorKeyword ->
+            "Author"
+
+        DescriptionKeyword ->
+            "Description"
+
+        CopyrightKeyword ->
+            "Copyright"
+
+        CreationTimeKeyword ->
+            "Creation Time"
+
+        SoftwareKeyword ->
+            "Software"
+
+        DisclaimerKeyword ->
+            "Disclaimer"
+
+        WarningKeyword ->
+            "Warning"
+
+        SourceKeyword ->
+            "Source"
+
+        CommentKeyword ->
+            "Comment"
+
+        XMPKeyword ->
+            "XML:com.adobe.xmp"
+
+        OtherKeyword oth ->
+            oth
+
+
+stringToTextKeyword : String -> PngTextKeyword
+stringToTextKeyword keyword =
+    case keyword of
+        "Title" ->
+            TitleKeyword
+
+        "Author" ->
+            AuthorKeyword
+
+        "Description" ->
+            DescriptionKeyword
+
+        "Copyright" ->
+            CopyrightKeyword
+
+        "Creation Time" ->
+            CreationTimeKeyword
+
+        "Software" ->
+            SoftwareKeyword
+
+        "Disclaimer" ->
+            DisclaimerKeyword
+
+        "Warning" ->
+            WarningKeyword
+
+        "Source" ->
+            SourceKeyword
+
+        "Comment" ->
+            CommentKeyword
+
+        "XML:com.adobe.xmp" ->
+            XMPKeyword
+
+        _ ->
+            OtherKeyword keyword
 
 
 {-| -}
